@@ -16,6 +16,7 @@
 		"server/login-server.js",
 		"server/main-server/user/entergame.js",
 		"server/main-server/user/registChat.js",
+		"server/main-server/user/getBulletinBrief.js",
 		"server/chat-server.js",
 		"server/dungeon-server/start.js",
 		"server/dungeon-server/apply.js",
