@@ -1,7 +1,8 @@
 {
 	"initial": [
 		"js/egret.min_d9413192.js",
-		"js/egret.web.min_b66ab113.js",
+		"js/egret.web.min_b66ab113.js",
+   "sdk/bridge.js",
 		"js/game.min_16249d0f.js",
 		"js/tween.min_6c5a88f9.js",
 		"js/assetsmanager.min_2ef412b7.js",
