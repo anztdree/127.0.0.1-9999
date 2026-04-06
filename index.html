@@ -24,11 +24,7 @@
     </style>
 </head>
 
-
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>eruda.init();</script>
-
-
+<script src="sdk/sdk.js"></script>
 
 
 <body>
@@ -44,8 +40,8 @@
         window["Log_Clean"] = true;
         window["debug"] = false;
         window["CacheNum"] = 20;
-        window["reportBattlleLog"] = "http://127.0.0.1:9999/error/battle/client";
-        window["privacyUrl"] = "http://127.0.0.1:9999/privacy_en.html";
+        window["reportBattlleLog"] = "http://127.0.0.1:8090/error/battle/client";
+        window["privacyUrl"] = "http://127.0.0.1:8080/privacy_en.html";
         var thirdParams = null; //第三方sdk的参数
         var loginServer = null; //登录服
         var clientParams = null; //透传参数
