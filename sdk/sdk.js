@@ -179,7 +179,7 @@
     }
 
     var SDK_CONFIG = {
-        loginServer: 'http://127.0.0.1:8000',
+        loginserver: 'http://127.0.0.1:8000',
         version: '2026-02-02',
         language: loadSavedLanguage(),
         thirdChannel: 'en',
