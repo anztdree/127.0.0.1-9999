@@ -13,7 +13,6 @@
 		"js/md5.min_97e969ef.js",
 		"js/lz-string.min_896bee8b.js",
 		"js/socket.io.min_57ea9db7.js",
-   "server/chat-server.js",
 		"js/blockmessage.min_7dc7bcec.js",
 		"js/battlelogic.min_d446437e.js",
 		"js/ThinkingAnalyticsSDK.min_72d3fad5.js",
