@@ -2,273 +2,259 @@
 <html>
 
 <head>
-    <meta charset="utf-8">
-    <title>超级战士Z</title>
-    <meta name="viewport"
-        content="width=device-width,initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="full-screen" content="true" />
-    <meta name="screen-orientation" content="portrait" />
-    <meta name="x5-fullscreen" content="true" />
-    <meta name="360-fullscreen" content="true" />
-    <style>
-        html,
-        body {
-            -ms-touch-action: none;
-            background: #888888;
-            padding: 0;
-            border: 0;
-            margin: 0;
-            height: 100%;
-        }
-    </style>
+	<meta charset="utf-8">
+	<title>超级战士Z</title>
+	<meta name="viewport" content="width=device-width,initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="full-screen" content="true" />
+	<meta name="screen-orientation" content="auto" />
+	<meta name="x5-fullscreen" content="true" />
+	<meta name="360-fullscreen" content="true" />
+	<style>
+		html,
+		body {
+			-ms-touch-action: none;
+			background: #000;
+			padding: 0;
+			border: 0;
+			margin: 0;
+			height: 100%;
+		}
+	</style>
+	<script type="text/javascript" src="jszip-utils.min.js"></script>
+	<script type="text/javascript" src="jszip.min.js"></script>
+	
+	
 </head>
 
-
-
-<script src="sdk/sdk.js"></script>
-
-
-<body>
-    <div style="margin: auto;width: 100%;height: 100%;" class="egret-player" data-entry-class="Main"
-        data-orientation="portrait" data-scale-mode="showAll" data-frame-rate="60" data-content-width="750"
-        data-content-height="1334" data-show-paint-rect="false" data-multi-fingered="2" data-show-fps="false"
-        data-show-log="false" data-show-fps-style="x:0,y:0,size:12,textColor:0xffffff,bgAlpha:0.9">
-    </div>
-    
-    
-    
-    <script>
-        window["Log_Clean"] = true;
-        window["debug"] = true;
-        window["CacheNum"] = 20;
-        window["reportBattlleLog"] = "http://127.0.0.1:8080/error/battle/client";
-        window["privacyUrl"] = "http://127.0.0.1:8080/privacy_en.html";
-        var thirdParams = null; //第三方sdk的参数
-        var loginServer = null; //登录服
-        var clientParams = null; //透传参数
-
-        var getLoginServer = function () {
-            return loginServer;
-        }
-        var loadScript = function (list, callback) {
-            var loaded = 0;
-            var loadNext = function () {
-                loadSingleScript(list[loaded], function () {
-                    loaded++;
-                    if (loaded >= list.length) {
-                        callback();
-                    } else {
-                        loadNext();
-                    }
-                })
-            };
-            loadNext();
-        };
-
-        var loadSingleScript = function (src, callback) {
-            var s = document.createElement('script');
-            s.async = false;
-            s.src = src;
-            s.addEventListener('load', function () {
-                s.parentNode.removeChild(s);
-                s.removeEventListener('load', arguments.callee, false);
-                callback();
-            }, false);
-            document.body.appendChild(s);
-        };
-
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', './manifest.json?v=' + Math.random(), true);
-        xhr.addEventListener("load", function () {
-            var manifest = JSON.parse(xhr.response);
-            var list = manifest.initial.concat(manifest.game);
-            loadScript(list, function () {
-                /**
-                 * {
-                 * "renderMode":, //Engine rendering mode, "canvas" or "webgl"
-                 * "audioType": 0 //Use the audio type, 0: default, 2: web audio, 3: audio
-                 * "antialias": //Whether the anti-aliasing is enabled in WebGL mode, true: on, false: off, defaults to false
-                 * "calculateCanvasScaleFactor": //a function return canvas scale factor
-                 * }
-                 **/
-
-                window["loadJsonFunc"] = function (path) {
-                    return RES.getRes(path);
-                }
-                window["refreshPage"] = function () {
-                    egret.ExternalInterface.call("refresh", "refresh");
-                    window["show18Login"] = clientParams["show18Login"];
-                    window["show18Home"] = clientParams["show18Home"];
-                    window["sdkNativeChannel"] = clientParams["sdkNativeChannel"];
-                    window["showCurChannel"] = clientParams["showCurChannel"];
-                }
-                egret.ExternalInterface.addCallback("refresh", function (msg) {
-                    window.location.reload();
-                });
-                egret.ExternalInterface.addCallback("startGame", function (msg) {
-                    var json = JSON.parse(msg);
-                    if (json.thirdParams && json.thirdParams != "") {
-                        thirdParams = JSON.parse(json.thirdParams);
-                        window["osType"] = thirdParams.osType;
-                    }
-                    loginServer = json.loginServer;
-                    window["gameIcon"] = json.thirdChannel;
-                    if (json.clientParams && json.clientParams != "") {
-                        clientParams = JSON.parse(json.clientParams);
-                        window["hideList"] = clientParams["hideList"];
-                        window["gameIcon"] = clientParams["gameIcon"];
-                        window["supportLang"] = clientParams["supportLang"];
-                        window["battleAudio"] = clientParams["battleAudio"];
-                        window["showUserCenterSdk"] = clientParams["showUserCenterSdk"];
-                        window["showContact"] = clientParams["showContact"];
-                        window["switchAccount"] = clientParams["switchAccount"];
-                        window["sdkNativeChannel"] = clientParams["sdkNativeChannel"];
-                        window["showCurChannel"] = clientParams["showCurChannel"];
-                    }
-                    if (window["osType"]) {
-                        window["version"] = json.version + " for " + window["osType"];
-                    } else {
-                        window["version"] = json.version;
-                    }
-                    window["versionConfig"] = json.versionConfig;
-                    window["debugLanguage"] = json.language;
-                    egret.runEgret({
-                        renderMode: "webgl",
-                        audioType: 0,
-                        calculateCanvasScaleFactor: function (context) {
-                            var backingStore = context.backingStorePixelRatio ||
-                                context.webkitBackingStorePixelRatio ||
-                                context.mozBackingStorePixelRatio ||
-                                context.msBackingStorePixelRatio ||
-                                context.oBackingStorePixelRatio ||
-                                context.backingStorePixelRatio || 1;
-                            return (window.devicePixelRatio || 1) / backingStore;
-                        }
-                    });
-                });
-                egret.ExternalInterface.call("startGame", "get Sdk Channel");
-
-            });
-        });
-        xhr.send(null);
-    </script>
-    
-    
-    <script>
-        var checkSDK = function () {
-            egret.ExternalInterface.call("changeView", "change view");
-            return true;
-        }
-        var getSdkLoginInfo = function () {
-            var sdkData = thirdParams.data;
-            if (sdkData && sdkData.securityCode) { 
-                // 这是配合海贼、乱斗的登录服务器
-                return {sdk:sdkData.sdk,nickName:sdkData.nickname,userId:sdkData.userid,security:sdkData.securityCode};
-            }
-            return thirdParams;
-        }
-
-        var checkFromNative = function () {
-            // 增加这个方法，支付的时候全部都只能一个一个买（不能设置数量）
-            return true;
-        }
-        var paySdk = function (data) {
-            data.power = data.money;
-            if (data.h5payParam) {
-                // 越南渠道特有的处理
-                data.serverName = data.serverId;
-            }
-            egret.ExternalInterface.call("pei", JSON.stringify(data));
-        }
-        var switchUser = function () {
-            egret.ExternalInterface.call("refresh", "switch usr");
-        };
-        //facebook 分享 serverId    roleName  extra  需要把这三个字段传一下  extra 可以为空
-        var giveLikeSdk = function (data) {
-            egret.ExternalInterface.call("giveLike", JSON.stringify(data));
-        };
-        //客服中心
-        var contactSdk = function () {
-            egret.ExternalInterface.call("contact", "contact");
-        };
-
-        //切换账户 贪玩en
-        var switchAccountSdk = function () {
-            egret.ExternalInterface.call("switchAccount", "switchAccount");
-        };
-
-        //fb 点赞
-        var fbGiveLiveSdk = function () {
-            egret.ExternalInterface.call("fbGiveLive", "fbGiveLive");
-        };
-
-        //用户中心
-        var userCenterSdk = function () {
-            egret.ExternalInterface.call("userCenter", "userCenter");
-        };
-        //领取礼包
-        var gifBagSdk = function () {
-            egret.ExternalInterface.call("gifBag", "gifBag");
-        };
-
-        var report2Sdk = function (data) {
-            data.powerNum = data.moneyNum;
-            egret.ExternalInterface.call("report2Third", JSON.stringify(data));
-        };
-        var gameChapterFinish = function (lessonId) {
-            if (thirdParams && thirdParams.sdkType == "PP") {
-                var data = {
-                    dataType: 12,
-                    level: lessonId
-                };
-                egret.ExternalInterface.call("report2Third", JSON.stringify(data));
-            }
-        }
-        var openShopPage = function () {
-            if (thirdParams && thirdParams.sdkType == "PP") {
-                var data = {
-                    dataType: 13
-                };
-                egret.ExternalInterface.call("report2Third", JSON.stringify(data));
-            }
-        }
-        var gameLevelUp = function (level) {
-            if (thirdParams && thirdParams.sdkType == "PP") {
-                var data = {
-                    dataType: 11,
-                    level: level
-                };
-                egret.ExternalInterface.call("report2Third", JSON.stringify(data));
-            }
-        }
-        var tutorialFinish = function () {
-            if (thirdParams && thirdParams.sdkType == "PP") {
-                var data = {
-                    dataType: 14
-                };
-                egret.ExternalInterface.call("report2Third", JSON.stringify(data));
-            }
-        }
-        var reload = function () {
-            egret.ExternalInterface.call("refresh", "reload game");
-        };
-
-        var changeLanguage = function (lang) {
-            egret.ExternalInterface.call("changeLanguage", lang);
-            window.location.reload();
-        }
-        var openURL = function (url) {
-            egret.ExternalInterface.call("openURL", url);
-        }
-
-        var open = function (url, target) {
-            egret.ExternalInterface.call("openURL", url);
-        }
-    </script>
-    
-    
-    
+<body style="overflow: hidden">
+	<div style="position: absolute; margin: auto; width: 100%; height:100%;z-index: 999;" id="maskloading">
+		<div style="overflow: hidden;margin: auto; width:750px; height:1334px;" id="maskloadinglayer"> <img src="background.jpg" alt="" style="width: 100%;" /><img src="animate.gif" id="animateloading" alt="" style="width: 280px; position: absolute;" /> </div>
+	</div>
+	<div style="margin: auto;width: 100%;height: 100%;" id="egret-player-layer" class="egret-player" data-entry-class="Main" data-orientation="auto" data-scale-mode="showAll" data-frame-rate="30" data-content-width="750" data-content-height="1334" data-show-paint-rect="false" data-multi-fingered="2" data-show-fps="false" data-show-log="false" data-show-fps-style="x:0,y:0,size:12,textColor:0xffffff,bgAlpha:0.9"></div>
+	<script>
+		function getQueryStringByName(name) {
+			var a = location.search.match(new RegExp("[\?\&]" + name + "=([^\&]+)", "i"));
+			if(a == null || a.length < 1) {
+				return "";
+			}
+			return a[1];
+		}
+	</script>
+	<script>
+		window["hideList"] = ["1.99", "2.99", "14.99", "59.99", "89.99"];
+		window["activityUrl"] = "";
+		window["clientver"] = "2026-03-02143147";
+		window["Log_Clean"] = false;
+		window["debug"] = true;
+		window["sdkChannel"] = "en";
+		window["gameIcon"] = "";
+		var resizeMask = function() {
+			var e = document.getElementById("maskloadinglayer");
+			var c = document.getElementById("animateloading");
+			var h = document.documentElement.clientWidth;
+			var d = document.documentElement.clientHeight;
+			var b = 750 / h;
+			var g = 1334 / d;
+			var f = Math.max(b, g);
+			if(f < 1) {
+				f = 1
+			}
+			var a = window.devicePixelRatio;
+			var f = f / a;
+			e.style.width = 750 / a / f + "px";
+			e.style.height = 1334 / a / f + "px";
+			c.style.width = 280 / a + "px";
+			c.style.top = 1334 / a / f / 2 + "px";
+			c.style.left = (h - 280 / a) / 2 + "px"
+		};
+		resizeMask();
+		var loadScript = function(c, e) {
+			var a = 0;
+			var b = c.length;
+			var d = function() {
+				var f = c[a];
+				loadSingleScript(f, function() {
+					f = null;
+					a++;
+					if(a >= b) {
+						e()
+					} else {
+						d()
+					}
+				})
+			};
+			d()
+		};
+		var loadSingleScript = function(b, c) {
+			var a = document.createElement("script");
+			a.async = false;
+			a.src = b;
+			a.addEventListener("load", function() {
+				a.parentNode.removeChild(a);
+				a.removeEventListener("load", arguments.callee, false);
+				c();
+				c = null
+			}, false);
+			document.body.appendChild(a)
+		};
+		var getNetwork = function() {
+			var a = navigator && navigator.connection;
+			return a
+		};
+		var clearMaskLayer = function() {
+			var b = document.getElementById("maskloading");
+			var a = document.getElementById("egret-player-layer");
+			if(b) {
+				b.style.display = "none"
+			}
+			if(a) {
+				a.style.display = ""
+			}
+		};
+		var onLoadScript = function() {
+			window["maskLayerClear"] = function() {
+				clearMaskLayer()
+			};
+			window["loadJsonFunc"] = function(b) {
+				var a = b.substr(0, b.length - 5) + ".json";
+				return window[a + ""]
+			};
+			window["refreshPage"] = function() {
+				window.document.location.reload()
+			};
+			egret.runEgret({
+				renderMode: "webgl",
+				audioType: 0,
+				calculateCanvasScaleFactor: function(a) {
+					var b = a.backingStorePixelRatio || a.webkitBackingStorePixelRatio || a.mozBackingStorePixelRatio || a.msBackingStorePixelRatio || a.oBackingStorePixelRatio || a.backingStorePixelRatio || 1;
+					return (window.devicePixelRatio || 1) / b
+				}
+			})
+		};
+		var loadSingleJson = function(f, d, a, e, c) {
+			var b = f[d];
+			e.file(b).async("text").then(function(g) {
+				window[b] = JSON.parse(g);
+				d++;
+				if(d < f.length) {
+					loadSingleJson(f, d, a, e, c)
+				} else {
+					c()
+				}
+			})
+		};
+		var loadMainJson = function(a, b) {
+			var d = new JSZip.external.Promise(function(f, e) {
+				JSZipUtils.getBinaryContent("resource/json.zp?ver=" + a, function(g, h) {
+					if(g) {
+						e(g)
+					} else {
+						f(h)
+					}
+				})
+			});
+			d.then(JSZip.loadAsync).then(function(f) {
+				var e = Object.keys(f.files);
+				loadSingleJson(e, 0, a, f, b)
+			}, function c(f) {
+				console.log("load json error", f.message)
+			})
+		};
+		var loadMainCodeAsync = function(ver) {
+			var promise = new JSZip.external.Promise(function(resolve, reject) {
+				JSZipUtils.getBinaryContent("main.min.js.zp?ver=" + ver, function(err, data) {
+					if(err) {
+						reject(err)
+					} else {
+						resolve(data)
+					}
+				})
+			});
+			promise.then(JSZip.loadAsync).then(function(zip) {
+				return zip.file("main.min.js").async("string")
+			}).then(function success(text) {
+				eval.call(window, text);
+				onLoadScript()
+			}, function error(e) {})
+		};
+		var startMain = function() {
+			var a = "2026-03-02143147";
+			loadMainJson(a, function() {
+				loadMainCodeAsync(a)
+			})
+		};
+		startMain();
+	</script>
+	<script>
+		var checkSDK = function() {
+			return true
+		};
+		var getSdkLoginInfo = function() {
+			var e = getParams();
+			var b = e["sdk"];
+			var c = e["logintoken"];
+			var d = e["nickname"];
+			var a = e["userid"];
+			if(!b || !c || !d || !a) {
+				return null
+			}
+			return {
+				sdk: b,
+				loginToken: c,
+				nickName: d,
+				userId: a
+			}
+		};
+		var getParams = function() {
+			var d = location.search.substring(1).split("&");
+			var b = {};
+			for(var a = 0; a < d.length; a++) {
+				var c = d[a].split("=");
+				b[c[0]] = c[1]
+			}
+			return b
+		};
+		if(window.PPGAME) {
+			var paySdk = function(a) {
+				window.PPGAME.createPaymentOrder(a)
+			};
+			var gameReady = function() {
+				window.PPGAME.gameReady()
+			};
+			var report2Sdk = function(a) {
+				if(a.dataType == 3) {
+					window.PPGAME.playerEnterServer({
+						"characterName": a.roleName,
+						"characterId": a.roleID,
+						"serverId": a.serverID,
+						"serverName": a.serverName
+					})
+				} else {
+					if(a.dataType == 2) {
+						window.PPGAME.submitEvent("game_create_role", {
+							"characterName": a.roleName,
+							"characterId": a.roleID,
+							"serverId": a.serverID,
+							"serverName": a.serverName
+						})
+					}
+				}
+			};
+			var gameChapterFinish = function(a) {
+				window.PPGAME.gameChapterFinish(a)
+			};
+			var openShopPage = function() {
+				window.PPGAME.openShopPage()
+			};
+			var gameLevelUp = function(a) {
+				window.PPGAME.gameLevelUp(a)
+			};
+			var tutorialFinish = function() {
+				window.PPGAME.submitEvent("game_tutorial_finish")
+			}
+		};
+	</script>
 </body>
 
 </html>
