@@ -1,22 +1,21 @@
 {
-  "name": "server",
+  "name": "super-warrior-z-server",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "description": "Super Warrior Z (超级战士Z) - Game Server",
+  "main": "login-server/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node login-server/index.js",
+    "login": "node login-server/index.js",
+    "main": "node main-server/index.js",
+    "chat": "node chat-server/index.js",
+    "dungeon": "node dungeon-server/index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.1",
-    "express": "^5.2.1",
-    "mariadb": "^3.5.2",
-    "socket.io": "^2.5.1"
+    "express": "^4.18.2",
+    "socket.io": "^2.5.0",
+    "mariadb": "^3.2.0",
+    "lz-string": "^1.5.0",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5"
   }
 }
