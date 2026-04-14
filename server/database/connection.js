@@ -166,12 +166,11 @@ async function initSchema() {
         // Source: UserDataParser.saveUserData(e) (line 77641-77724)
         // ============================================
 
-        // Drop existing user_data to ensure clean schema (dev mode)
-        // NOTE: This clears all game progress. Remove DROP for production.
-        await conn.query('DROP TABLE IF EXISTS user_data');
-
+        // FIX 4: Use CREATE TABLE IF NOT EXISTS instead of DROP + CREATE.
+        // The original DROP TABLE IF EXISTS destroyed ALL game progress on every restart.
+        // This was a dev-mode shortcut that must not remain in production code.
         await conn.query(`
-            CREATE TABLE user_data (
+            CREATE TABLE IF NOT EXISTS user_data (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id VARCHAR(64) NOT NULL COMMENT 'userId from enterGame request',
                 server_id INT NOT NULL DEFAULT 1 COMMENT 'serverId from enterGame request',
