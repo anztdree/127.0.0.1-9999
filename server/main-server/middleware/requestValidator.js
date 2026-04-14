@@ -130,12 +130,13 @@ var RequestValidator = {
     },
 
     /**
-     * Validate that all required parameter keys exist in parsedRequest.params.
+     * Validate that all required parameter keys exist in the parsed request.
      *
-     * Checks that parsedRequest.params is an object and that every key
-     * listed in requiredParams is present (value can be any truthy/falsy value).
+     * FIX 5: Client sends params at top level of request object, NOT nested in .params.
+     * Client request: { type, action, userId, heroId, ... }
+     * This function now checks parsedRequest directly instead of parsedRequest.params.
      *
-     * @param {object} parsedRequest - Parsed request object with .params property
+     * @param {object} parsedRequest - Parsed request object from ResponseHelper.parseRequest()
      * @param {Array<string>} requiredParams - Array of required parameter key names
      * @returns {object} Validation result:
      *   - {valid: true} jika semua params ada
@@ -156,22 +157,12 @@ var RequestValidator = {
             return { valid: true };
         }
 
-        // Ensure params object exists
-        var params = parsedRequest.params;
-        if (!params || typeof params !== 'object') {
-            return {
-                valid: false,
-                error: 'Request has no "params" object',
-                code: ERROR_INVALID_PARAMS,
-                missing: requiredParams.slice()
-            };
-        }
-
-        // Check each required param
+        // FIX 5: Check params directly on parsedRequest, NOT parsedRequest.params
+        // Client sends: { type, action, userId, heroId, ... } — all at top level
         var missing = [];
         for (var i = 0; i < requiredParams.length; i++) {
             var key = requiredParams[i];
-            if (params[key] === undefined || params[key] === null) {
+            if (parsedRequest[key] === undefined || parsedRequest[key] === null) {
                 missing.push(key);
             }
         }

@@ -22,8 +22,11 @@
 
 var ResponseHelper = require('../../shared/responseHelper');
 
-/** @type {number} Error code untuk session expired / not verified */
-var ERROR_SESSION_EXPIRED = ResponseHelper.ErrorCode.SESSION_EXPIRED || 6;
+/** @type {number} Error code for session expired / not verified — FIX 7: Now uses defined constant */
+var ERROR_SESSION_EXPIRED = ResponseHelper.ErrorCode.SESSION_EXPIRED; // 6
+
+/** @type {number} Error code for unknown/internal errors — FIX 7: Now uses defined constant */
+var ERROR_UNKNOWN = ResponseHelper.ErrorCode.UNKNOWN_ERROR; // 1
 
 var TeaAuth = {
 
@@ -99,18 +102,16 @@ var TeaAuth = {
                 console.error('[TeaAuth] Handler error after auth check: ' + err.message);
                 console.error('[TeaAuth] Stack: ' + err.stack);
                 if (typeof callback === 'function') {
-                    var errorResponse = ResponseHelper.error(
-                        ResponseHelper.ErrorCode.UNKNOWN_ERROR || 1,
+                    var errorResponse = ResponseHelper.error(ERROR_UNKNOWN,
                         'Internal server error');
                     callback(errorResponse);
                 }
             }
         } else {
             console.error('[TeaAuth] requireAuth called with non-function handler');
-            if (typeof callback === 'function') {
-                var errorResponse = ResponseHelper.error(
-                    ResponseHelper.ErrorCode.UNKNOWN_ERROR || 1,
-                    'Invalid handler configuration');
+                if (typeof callback === 'function') {
+                    var errorResponse = ResponseHelper.error(ERROR_UNKNOWN,
+                        'Invalid handler configuration');
                 callback(errorResponse);
             }
         }
