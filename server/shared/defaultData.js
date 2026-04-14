@@ -234,44 +234,79 @@ function generateNewUserData(userId, nickName, serverId) {
         // heroSkin (line 77686): HeroSkinModel.setSkinsWithServerData(e.heroSkin)
         heroSkin: null,
 
-        // scheduleInfo (line 77717): AllRefreshCount.initData(e.scheduleInfo)
-        // Reads ALL schedule fields unconditionally
+        // scheduleInfo (line 58004-58006): AllRefreshCount.initData(e.scheduleInfo)
+        // ALL fields below are read from e.scheduleInfo in initData().
+        // Fields WITHOUT void 0 != guard are read UNCONDITIONALLY — must exist or crash!
+        // Verified against client constructor (line 58000) for default values.
         scheduleInfo: {
+            // === UNCONDITIONAL (no guard) — CRASH if missing ===
             _marketDiamondRefreshCount: 0,
             _vipMarketDiamondRefreshCount: 0,
             _arenaAttackTimes: 0,
             _arenaBuyTimesCount: 0,
             _snakeResetTimes: 0,
             _snakeSweepCount: 0,
-            _cellGameHaveGotReward: true,
+            _cellGameHaveGotReward: true,       // boolean, default true in constructor
             _cellGameHaveTimes: 0,
-            _cellgameHaveSetHero: false,
+            _cellgameHaveSetHero: false,         // boolean, default false in constructor
             _strongEnemyTimes: 0,
             _strongEnemyBuyCount: 0,
+            _mergeBossBuyCount: 0,
+            // CounterpartSingleton.setCounterPartTime(e._dungeonTimes) — unconditional
+            _dungeonTimes: 0,
+            // CounterpartSingleton.setCounterPartBuyCount(e._dungeonBuyTimesCount) — unconditional
+            _dungeonBuyTimesCount: 0,
             _karinBattleTimes: 0,
             _karinBuyBattleTimesCount: 0,
             _karinBuyFeetCount: 0,
             _entrustResetTimes: 0,
-            _treasureTimes: 0,
-            _guildBossTimes: 0,
-            _guildBossTimesBuyCount: 0,
-            _mergeBossBuyCount: 0,
+            // Dragon exchange — unconditional
+            _dragonExchangeSSPoolId: 0,
+            _dragonExchangeSSSPoolId: 0,
+            // Team dungeon robots — unconditional, default [] in constructor
+            _teamDugeonUsedRobots: [],
+            // Space trial — unconditional (stored as _spaceTrialBuyCount on client)
+            _timeTrialBuyTimesCount: 0,
+            // Month card — unconditional
             _monthCardHaveGotReward: {},
+            // Gold buy — unconditional
             _goldBuyCount: 0,
-            _dungeonTimes: 0,
-            _dungeonBuyTimesCount: 0,
+            // Like rank — unconditional
             _likeRank: {},
+            // Maha adventure — unconditional
             _mahaAttackTimes: 0,
             _mahaBuyTimesCount: 0,
+            // Guild — unconditional
+            _guildBossTimes: 0,
+            _guildBossTimesBuyCount: 0,
+            _treasureTimes: 0,
+            // Guild check-in — unconditional, passed to TeamInfoManager.playerSignInID()
+            _guildCheckInType: 0,
+            // Top battle — unconditional
+            _topBattleTimes: 0,
+            _topBattleBuyCount: 0,
+            // Temple — unconditional
+            _templeDailyReward: null,
+            _templeYesterdayLess: null,
+            // Click time gift — unconditional, boolean default false in constructor
+            _clickTimeGift: false,
+            // Expedition — unconditional assignments (not guarded)
+            _clickExpedition: false,
+            _expeditionSpeedUpCost: 0,
+            // Gravity trial — unconditional
+            _gravityTrialBuyTimesCount: 0,
+
+            // === GUARDED with void 0 != (safe if missing, but include for completeness) ===
+            _mineResetTimes: 0,
+            _mineBuyResetTimesCount: 0,
+            _mineBuyStepCount: 0,
             _templeBuyCount: 0,
             _trainingBuyCount: 0,
             _bossCptTimes: 0,
             _bossCptBuyCount: 0,
             _ballWarBuyCount: 0,
-            _topBattleTimes: 0,
-            _topBattleBuyCount: 0,
-            _timeTrialBuyTimesCount: 0,
-            _gravityTrialBuyTimesCount: 0,
+            // Expedition events — guarded (e._expeditionEvents &&)
+            _expeditionEvents: null,
         },
 
         // dungeon (line 77710-77714): setCounterpart(e)
@@ -380,12 +415,18 @@ function generateNewUserData(userId, nickName, serverId) {
         // Line 62326-62342: firstLoginSetMyTeam iterates keys, creates LastTeamInfo per type
         // Line 62343: getMyTeamByType(e) accesses t._lastTeamInfo[e]
         // Line 62606: LAST_TEAM_TYPE.HANGUP = 9 (used by OnHookSingleton.getLastOnHookTeam)
-        // MUST have HANGUP team with default hero, otherwise OverScene.goHome crashes
-        // Structure: { _lastTeamInfo: { "9": { _team: [{_heroId, _position}], _superSkill: [] } } }
+        //
+        // IMPORTANT: New user starts with EMPTY HANGUP team (no pre-placed heroes).
+        // The tutorial (steps 2105-2107) teaches the user to manually select heroes.
+        // If a hero is pre-placed here, initGotoBattle() will pre-place it in formation,
+        // then clickHeroListItem() will toggle-REMOVE it instead of adding it (BUG).
+        // Client safely handles empty team: battleTeamRemoveDecomposeHero() returns []
+        // when team is undefined/empty (line 54713: if(!t) return n).
+        // Team is saved properly after tutorial step 2107 via saveGuideTeam.
         lastTeam: {
             _lastTeamInfo: {
-                9: {  // LAST_TEAM_TYPE.HANGUP - required by OnHookSingleton.getLastOnHookTeam
-                    _team: [{ _heroId: userId, _position: 0 }],
+                9: {  // LAST_TEAM_TYPE.HANGUP
+                    _team: [],
                     _superSkill: [],
                 },
             },
