@@ -290,31 +290,54 @@ io.on('connection', function (socket) {
     /**
      * Handle "verify" event from client.
      *
+     * CLIENT CODE (line 52006-52013):
+     *   socket.on("verify", function(n) {           // receive challenge
+     *       var o = (new TEA).encrypt(n, "verification");
+     *       socket.emit("verify", o, function(n) {   // send encrypted + CALLBACK
+     *           0 == n.ret ? e() : ErrorHandler.ShowErrorTips(n.ret)
+     *       })
+     *   })
+     *
      * Protocol:
      *   1. Server sends challenge string via "verify"
      *   2. Client encrypts challenge with TEA key
-     *   3. Client sends encrypted hex string via "verify"
+     *   3. Client emits "verify" with encrypted + ACK callback
      *   4. Server decrypts and compares
-     *   5. If match → socket._verified = true, start processing
-     *   6. If no match → increment attempts, disconnect if exceeded
+     *   5. If match → callback({ ret: 0 }) → client proceeds
+     *   6. If no match → callback({ ret: errorCode }) → client shows error
      *
-     * @param {string} encryptedResponse - TEA-encrypted hex string from client
+     * CRITICAL: The callback is Socket.IO acknowledgment.
+     * Client sends: socket.emit("verify", encrypted, function(n) { ... })
+     * Server MUST call callback({ ret: 0 }) or client HANGS FOREVER.
+     *
+     * @param {string} encryptedResponse - TEA-encrypted (Base64) string from client
+     * @param {function} callback - Socket.IO acknowledgment callback from client
      */
-    socket.on('verify', function (encryptedResponse) {
+    socket.on('verify', function (encryptedResponse, callback) {
         socket._verifyAttempts++;
 
+        // Helper: send verify result to client via callback
+        function sendVerifyResult(code) {
+            if (typeof callback === 'function') {
+                callback({ ret: code, compress: false, serverTime: Date.now(), server0Time: Date.now() });
+            }
+        }
+
         if (socket._verified) {
-            // Already verified, ignore redundant verify events
+            // Already verified, respond success (re-verify scenario)
+            sendVerifyResult(0);
             return;
         }
 
         if (!encryptedResponse) {
             console.warn('[Verify] Empty response from socket ' + socket.id);
-            socket.emit('verifyFailed', 'Empty response');
             if (socket._verifyAttempts >= VERIFY_MAX_ATTEMPTS) {
                 console.warn('[Verify] Max attempts exceeded for socket ' + socket.id);
                 clearTimeout(verifyTimer);
+                sendVerifyResult(38);
                 socket.disconnect(true);
+            } else {
+                sendVerifyResult(4);
             }
             return;
         }
@@ -326,16 +349,23 @@ io.on('connection', function (socket) {
             clearTimeout(verifyTimer);
             console.log('[Verify] Socket ' + socket.id + ' verified successfully' +
                 ' (attempt ' + socket._verifyAttempts + ')');
+            // CRITICAL: Tell client verification succeeded
+            // Client: 0 == n.ret ? e() → proceed to game
+            sendVerifyResult(0);
         } else {
             console.warn('[Verify] Invalid response from socket ' + socket.id +
                 ' (attempt ' + socket._verifyAttempts + '/' + VERIFY_MAX_ATTEMPTS + ')');
-            socket.emit('verifyFailed', 'Invalid verification');
 
             if (socket._verifyAttempts >= VERIFY_MAX_ATTEMPTS) {
                 console.warn('[Verify] Max attempts exceeded for socket ' + socket.id +
                     ' — disconnecting');
                 clearTimeout(verifyTimer);
+                // ret=38 triggers TSBrowser.executeFunction("reload") on client
+                sendVerifyResult(38);
                 socket.disconnect(true);
+            } else {
+                // Report failure but allow retry
+                sendVerifyResult(38);
             }
         }
     });
