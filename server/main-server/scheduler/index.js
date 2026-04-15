@@ -70,10 +70,12 @@ function _scheduleNextDailyReset(connectedClients) {
                 result.processed + ' processed, ' + result.failed + ' failed');
 
             // Notify all connected users about the reset
+            // FIX #5: Client action is 'scheduleModelRefresh', not 'signInRefresh'
+            // Client: if("scheduleModelRefresh" == n) return void AllRefreshCount.getInstance().initData(e._model)
             if (connectedClients && result.processed > 0) {
                 var Notifications = require('../notifications');
-                Notifications.broadcastNotify(connectedClients, 'signInRefresh', {
-                    message: 'Daily reset complete'
+                Notifications.broadcastNotify(connectedClients, 'scheduleModelRefresh', {
+                    _model: {}  // Client reads e._model in AllRefreshCount.initData()
                 });
             }
 
@@ -90,12 +92,21 @@ function _scheduleNextDailyReset(connectedClients) {
 }
 
 /**
+ * Reference to the battle cleanup interval timer.
+ * Stored so it can be properly cleared during shutdown.
+ * @type {number|null}
+ * @private
+ */
+var _battleCleanupInterval = null;
+
+/**
  * Schedule periodic battle cleanup.
  * Cleans up expired battles every 5 minutes to prevent memory leaks.
  * @private
  */
 function _scheduleBattleCleanup() {
-    setInterval(function () {
+    // FIX #2: Store interval reference for proper cleanup on shutdown
+    _battleCleanupInterval = setInterval(function () {
         try {
             var BattleService = require('../services/battleService');
             var stats = BattleService.cleanupExpiredBattles();
@@ -114,6 +125,14 @@ function _scheduleBattleCleanup() {
  */
 function shutdown() {
     console.log('[Scheduler] Shutting down all scheduler systems...');
+
+    // FIX #2: Clear battle cleanup interval
+    if (_battleCleanupInterval) {
+        clearInterval(_battleCleanupInterval);
+        _battleCleanupInterval = null;
+        console.log('[Scheduler] Battle cleanup interval cleared');
+    }
+
     activityScheduler.shutdown();
     console.log('[Scheduler] All scheduler systems shut down');
 }

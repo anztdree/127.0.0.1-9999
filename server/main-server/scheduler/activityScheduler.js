@@ -194,6 +194,15 @@ function _calculateState(activity, now) {
 /**
  * Notify connected users about activity state change.
  *
+ * FIX #4: Activity state changes should NOT use scheduleModelRefresh because:
+ *   1. Client expects e._model with scheduleInfo fields for scheduleModelRefresh
+ *   2. Activity state changes don't affect scheduleInfo counters
+ *   3. Sending empty/wrong _model causes initData() to do nothing useful
+ *
+ * Instead, use 'broadcast' action which the client handles by showing
+ * a notification message. Activity state is read by client from
+ * activityDefine/activityTime configs on next refresh, not from push.
+ *
  * @param {object} connectedClients - Map of userId -> socket
  * @param {string} actId - Activity ID
  * @param {string} newState - New activity state
@@ -201,11 +210,12 @@ function _calculateState(activity, now) {
  */
 function _notifyActivityChange(connectedClients, actId, newState) {
     var Notifications = require('../notifications');
-    var action = newState === ACTIVITY_STATE.OPEN ? 'activityOpen' : 'activityClose';
-
-    Notifications.broadcastNotify(connectedClients, action, {
-        activityId: actId,
-        state: newState
+    // FIX #4: Use 'broadcast' action instead of 'scheduleModelRefresh'
+    // 'scheduleModelRefresh' requires {_model: {...scheduleInfoFields...}} which
+    // we don't have here. 'broadcast' shows a message via ts.openWindow("BarTypeTips").
+    // Activity state changes are picked up by client from configs on next data refresh.
+    Notifications.broadcastNotify(connectedClients, 'broadcast', {
+        _msg: 'Activity ' + actId + ' is now ' + newState
     });
 }
 
