@@ -197,28 +197,22 @@ function actionGetAll(userId, callback) {
 
             var heroRoster = gameData.heros._heros;
             var heroKeys = Object.keys(heroRoster);
-            var response = { _heros: {} };
 
             // Build a map of heroDisplayId -> max level across all owned instances
             // (user can have multiple copies of same hero from summons)
             var displayIdMaxLevel = {};
             for (var i = 0; i < heroKeys.length; i++) {
-                var heroId = heroKeys[i];
-                var heroData = heroRoster[heroId];
-                if (!heroData) continue;
+                var heroData = heroRoster[heroKeys[i]];
+                if (!heroData || !heroData._heroDisplayId) continue;
 
-                var displayId = heroData._heroDisplayId;
-                var level = 0;
-                if (heroData._heroBaseAttr && heroData._heroBaseAttr._level) {
-                    level = heroData._heroBaseAttr._level;
-                }
+                var displayId = String(heroData._heroDisplayId);
+                var level = (heroData._heroBaseAttr && heroData._heroBaseAttr._level) || 0;
 
                 if (!displayIdMaxLevel[displayId] || level > displayIdMaxLevel[displayId]) {
                     displayIdMaxLevel[displayId] = level;
                 }
             }
 
-            // Now fetch self comments from DB for all these heroes
             var displayIds = Object.keys(displayIdMaxLevel);
 
             if (displayIds.length === 0) {
@@ -227,42 +221,51 @@ function actionGetAll(userId, callback) {
                 return;
             }
 
-            // Query self comments for all owned heroes
-            var placeholders = displayIds.map(function () { return '?'; }).join(',');
-            return DB.query(
-                'SELECT hero_display_id, detail FROM hero_comments WHERE user_id = ? AND hero_display_id IN (' + placeholders + ')',
-                [userId].concat(displayIds)
-            ).then(function (commentRows) {
-                // Group comments by heroDisplayId
-                var selfCommentsMap = {};
+            // Build response from hero data FIRST (guaranteed available).
+            // Comments are optional enrichment — failure must NOT lose hero data.
+            var response = { _heros: {} };
+            for (var d = 0; d < displayIds.length; d++) {
+                response._heros[displayIds[d]] = {
+                    _id: displayIds[d],
+                    _maxLevel: displayIdMaxLevel[displayIds[d]],
+                    _selfComments: []
+                };
+            }
+
+            // Ensure table exists before querying
+            // (getAll runs on LOGIN — may be the first heroImage access ever)
+            return ensureTable().then(function () {
+                var placeholders = displayIds.map(function () { return '?'; }).join(',');
+                return DB.query(
+                    'SELECT hero_display_id, detail FROM hero_comments WHERE user_id = ? AND hero_display_id IN (' + placeholders + ')',
+                    [userId].concat(displayIds)
+                );
+            }).then(function (commentRows) {
                 if (commentRows && commentRows.length > 0) {
                     for (var c = 0; c < commentRows.length; c++) {
                         var row = commentRows[c];
-                        var hid = row.hero_display_id;
-                        if (!selfCommentsMap[hid]) {
-                            selfCommentsMap[hid] = [];
+                        var hid = String(row.hero_display_id);
+                        if (response._heros[hid]) {
+                            response._heros[hid]._selfComments.push(row.detail);
                         }
-                        selfCommentsMap[hid].push(row.detail);
                     }
                 }
 
-                // Build response
-                for (var d = 0; d < displayIds.length; d++) {
-                    var did = displayIds[d];
-                    response._heros[did] = {
-                        _id: did,
-                        _maxLevel: displayIdMaxLevel[did],
-                        _selfComments: selfCommentsMap[did] || []
-                    };
-                }
-
-                logger.info('HEROIMAGE', 'getAll userId=' + userId + ' heroCount=' + displayIds.length);
+                logger.info('HEROIMAGE', 'getAll userId=' + userId +
+                    ' heroCount=' + displayIds.length +
+                    ' commentsLoaded=' + (commentRows ? commentRows.length : 0));
+                callback(RH.success(response));
+            }).catch(function (commentErr) {
+                // Comments query failed — return hero data WITHOUT comments
+                // (better than returning empty hero book)
+                logger.warn('HEROIMAGE', 'getAll comments failed for userId=' + userId +
+                    ': ' + commentErr.message + ' — returning heroes without comments');
                 callback(RH.success(response));
             });
         })
         .catch(function (err) {
-            logger.info('HEROIMAGE', 'getAll error for userId=' + userId + ': ' + err.message);
-            // On error, return empty hero book (client handles gracefully)
+            logger.error('HEROIMAGE', 'getAll userData error for userId=' + userId +
+                ': ' + err.message);
             callback(RH.success({ _heros: {} }));
         });
 }
