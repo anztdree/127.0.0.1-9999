@@ -2,17 +2,17 @@
 
 /**
  * =====================================================
- *  activity/boss/attackNienBeast.js
+ *  activity/boss/mergeBossStartBattle.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: attackNienBeast
- *  DESC: Attack the Nien Beast boss
+ *  ACTION: mergeBossStartBattle
+ *  DESC: Start a merge boss battle
  *  TYPE: WRITE
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"attackNienBeast", userId, actId, propId, propNum, bossId }
+ *    { type:"activity", action:"mergeBossStartBattle", userId, guildUUID, actId, version, team, super, battleField }
  *
- *  CLIENT SOURCE: attackRequest() (line 93864)
+ *  CLIENT SOURCE: mergeBossBattle() (line 64109)
  *
  *  RESPONSE (Universal):
  *    { _changeInfo: { _items: {...} },
@@ -28,7 +28,7 @@ var logger = require('../../../../shared/utils/logger');
 
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    logger.info('ACTIVITY', 'attackNienBeast' + ' userId=' + userId);
+    logger.info('ACTIVITY', 'mergeBossStartBattle' + ' userId=' + userId);
 
     // TODO: Implement business logic
 
