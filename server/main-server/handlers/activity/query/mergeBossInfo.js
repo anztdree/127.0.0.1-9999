@@ -2,20 +2,17 @@
 
 /**
  * =====================================================
- *  activity/query/queryCSRank.js
+ *  activity/query/mergeBossInfo.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: queryCSRank
- *  DESC: Query cross-server rank for an activity
+ *  ACTION: mergeBossInfo
+ *  DESC: Get merge boss event info for current user
  *  TYPE: READ
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"queryCSRank", userId, actId }
+ *    { type:"activity", action:"mergeBossInfo", userId, guildUUID, version }
  *
- *  CLIENT SOURCE: rankBtnTap() (line 89837)
- *
- *  RESPONSE (Custom):
- *    { rank data for cross-server leaderboard }
+ *  CLIENT SOURCE: mergeBossInfo() (line 95631) — ActivityMergeBoss panel
  *
  *  STATUS: TODO
  * =====================================================
@@ -26,8 +23,7 @@ var logger = require('../../../../shared/utils/logger');
 
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    var actId = parsed.actId;
-    logger.info('ACTIVITY', 'queryCSRank userId=' + userId + ' actId=' + actId);
+    logger.info('ACTIVITY', 'mergeBossInfo userId=' + userId);
 
     callback(RH.success({}));
 }

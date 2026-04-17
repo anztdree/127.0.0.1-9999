@@ -2,20 +2,17 @@
 
 /**
  * =====================================================
- *  activity/query/queryCSRank.js
+ *  activity/query/queryImprintTmpPower.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: queryCSRank
- *  DESC: Query cross-server rank for an activity
+ *  ACTION: queryImprintTmpPower
+ *  DESC: Query the temporary power bonus from current imprint
  *  TYPE: READ
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"queryCSRank", userId, actId }
+ *    { type:"activity", action:"queryImprintTmpPower", userId, actId, imprintId }
  *
- *  CLIENT SOURCE: rankBtnTap() (line 89837)
- *
- *  RESPONSE (Custom):
- *    { rank data for cross-server leaderboard }
+ *  CLIENT SOURCE: sign wash check (line 98677)
  *
  *  STATUS: TODO
  * =====================================================
@@ -27,7 +24,7 @@ var logger = require('../../../../shared/utils/logger');
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
     var actId = parsed.actId;
-    logger.info('ACTIVITY', 'queryCSRank userId=' + userId + ' actId=' + actId);
+    logger.info('ACTIVITY', 'queryImprintTmpPower userId=' + userId + ' actId=' + actId);
 
     callback(RH.success({}));
 }

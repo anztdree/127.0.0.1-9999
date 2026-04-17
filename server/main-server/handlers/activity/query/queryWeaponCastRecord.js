@@ -2,20 +2,17 @@
 
 /**
  * =====================================================
- *  activity/query/queryCSRank.js
+ *  activity/query/queryWeaponCastRecord.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: queryCSRank
- *  DESC: Query cross-server rank for an activity
+ *  ACTION: queryWeaponCastRecord
+ *  DESC: Query user's weapon cast lottery history
  *  TYPE: READ
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"queryCSRank", userId, actId }
+ *    { type:"activity", action:"queryWeaponCastRecord", userId, actId, time }
  *
- *  CLIENT SOURCE: rankBtnTap() (line 89837)
- *
- *  RESPONSE (Custom):
- *    { rank data for cross-server leaderboard }
+ *  CLIENT SOURCE: queryBtnTap() (line 90018)
  *
  *  STATUS: TODO
  * =====================================================
@@ -27,7 +24,7 @@ var logger = require('../../../../shared/utils/logger');
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
     var actId = parsed.actId;
-    logger.info('ACTIVITY', 'queryCSRank userId=' + userId + ' actId=' + actId);
+    logger.info('ACTIVITY', 'queryWeaponCastRecord userId=' + userId + ' actId=' + actId);
 
     callback(RH.success({}));
 }

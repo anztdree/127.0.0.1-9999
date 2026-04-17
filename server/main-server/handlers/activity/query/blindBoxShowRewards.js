@@ -2,20 +2,17 @@
 
 /**
  * =====================================================
- *  activity/query/queryCSRank.js
+ *  activity/query/blindBoxShowRewards.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: queryCSRank
- *  DESC: Query cross-server rank for an activity
+ *  ACTION: blindBoxShowRewards
+ *  DESC: Show the list of possible blind box rewards
  *  TYPE: READ
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"queryCSRank", userId, actId }
+ *    { type:"activity", action:"blindBoxShowRewards", actId, userId }
  *
- *  CLIENT SOURCE: rankBtnTap() (line 89837)
- *
- *  RESPONSE (Custom):
- *    { rank data for cross-server leaderboard }
+ *  CLIENT SOURCE: childrenCreated() (line 89455) — ActivityBlindBox panel
  *
  *  STATUS: TODO
  * =====================================================
@@ -27,7 +24,7 @@ var logger = require('../../../../shared/utils/logger');
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
     var actId = parsed.actId;
-    logger.info('ACTIVITY', 'queryCSRank userId=' + userId + ' actId=' + actId);
+    logger.info('ACTIVITY', 'blindBoxShowRewards userId=' + userId + ' actId=' + actId);
 
     callback(RH.success({}));
 }
