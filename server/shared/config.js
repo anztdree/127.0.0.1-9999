@@ -57,7 +57,7 @@
  *   - dungeon-server/index.js:45 → config.validateConfig()
  */
 
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 var config = {
     // ============================================
