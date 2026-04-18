@@ -2,17 +2,17 @@
 
 /**
  * =====================================================
- *  activity/farm/gleaning.js
+ *  activity/farm/gleaningBuyTicket.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: gleaning
- *  DESC: Perform gleaning action
+ *  ACTION: gleaningBuyTicket
+ *  DESC: Purchase extra gleaning tickets
  *  TYPE: WRITE
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"gleaning", actId, userId }
+ *    { type:"activity", action:"gleaningBuyTicket", actId, userId, num }
  *
- *  CLIENT SOURCE: harvest click (line 93018)
+ *  CLIENT SOURCE: buyGleaningCost() (line 93039)
  *
  *  RESPONSE (Universal):
  *    { _changeInfo: { _items: {...} },
@@ -28,7 +28,7 @@ var logger = require('../../../../shared/utils/logger');
 
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    logger.info('ACTIVITY', 'gleaning' + ' userId=' + userId);
+    logger.info('ACTIVITY', 'gleaningBuyTicket' + ' userId=' + userId);
 
     // TODO: Implement business logic
 
