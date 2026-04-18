@@ -2,17 +2,17 @@
 
 /**
  * =====================================================
- *  activity/misc/dailyBigGiftReward.js
+ *  activity/misc/summonGiftReward.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: dailyBigGiftReward
- *  DESC: Claim daily big gift reward
+ *  ACTION: summonGiftReward
+ *  DESC: Claim summon gift pack reward
  *  TYPE: WRITE
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"dailyBigGiftReward", actId, userId, day, itemId }
+ *    { type:"activity", action:"summonGiftReward", actId, userId, itemId, pick }
  *
- *  CLIENT SOURCE: ActivitySetReward.dailyBigGiftReward() (line ~79577)
+ *  CLIENT SOURCE: ActivitySetReward.SummonGiftReward() (line ~79577)
  *
  *  RESPONSE (Universal):
  *    { _changeInfo: { _items: {...} },
@@ -28,7 +28,7 @@ var logger = require('../../../../shared/utils/logger');
 
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    logger.info('ACTIVITY', 'dailyBigGiftReward' + ' userId=' + userId);
+    logger.info('ACTIVITY', 'summonGiftReward' + ' userId=' + userId);
 
     // TODO: Implement business logic
 
