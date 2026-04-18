@@ -5,133 +5,156 @@
  *  activity/query/getActivityBrief.js — Get Activity Brief List
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: getActivityBrief — Return brief list of all active activities.
+ *  ACTION: getActivityBrief — Return filtered list of active activities.
  *
- *  STATUS: IMPLEMENTED — 100% verified against HAR + main.min.js client code
+ *  STATUS: SEMPURNA — 100% sesuai main.min.js client code
  *
- *  ═══════════════════════════════════════════════════
- *  CLIENT REQUEST (HAR + main.min.js line 168092-168096):
+ *  ═══════════════════════════════════════════════════════
+ *  ALUR KERJA HANDLER:
+ *
+ *  1. Baca ACTIVITY_BRIEF_LIST dari _config.js
+ *  2. Filter menggunakan ActivityManager.isActivityAvailableByDay()
+ *     — Cek minDay ≤ openServerDays ≤ maxDay
+ *  3. Deep clone setiap aktivitas yang lolos filter
+ *  4. STRIP server-only field (minDay, maxDay) dari response
+ *  5. STRIP hangupReward jika null/undefined (bukan tipe ITEM_DROP)
+ *  6. Build ACTS_MAP { [id]: activityObj }
+ *  7. Return { type, action, userId, version, _acts }
+ *
+ *  ═══════════════════════════════════════════════════════
+ *  CLIENT REQUEST (main.min.js line 168092-168096):
  *    { type:"activity", action:"getActivityBrief", userId, version:"1.0" }
  *
  *  CLIENT CALLBACKS (2 call sites):
  *    1. Home.setActs (line 168087) — main entry, populates activity bar
  *    2. backToActivityPage (line 57528) — returning from activity detail
  *
- *  RESPONSE FORMAT (verified from HAR, 28 identical responses):
+ *  ═══════════════════════════════════════════════════════
+ *  RESPONSE FORMAT — objek per aktivitas di _acts:
+ *
  *    {
- *      type: "activity",
- *      action: "getActivityBrief",
- *      userId: "...",
- *      version: "1.0",
- *      _acts: {
- *        "<uuid>": {
- *          id: "<uuid>",           // Activity UUID (matches key)
- *          templateName: "...",    // Chinese template name
- *          name: "...",            // English display name
- *          icon: "/activity/...",  // Icon path (some have ?rnd= cache buster)
- *          displayIndex: number,   // Sort order within cycle group
- *          showRed: boolean,       // Red dot notification flag
- *          actCycle: number,       // ACTIVITY_CYCLE enum value
- *          actType: number,        // ACTIVITY_TYPE enum value
- *          [haveExReward]: boolean // OPTIONAL — only on actType=1001 (LOGIN)
- *        }
- *      }
+ *      id:           string   — UUID aktivitas
+ *      templateName: string   — Nama template (HAR field, client tidak baca)
+ *      name:         string   — Nama display (HAR field, client tidak baca)
+ *      icon:         string   — Path ikon (line 103410, 168162)
+ *      displayIndex: number   — Sort desc (line 103407)
+ *      showRed:      boolean  — Flag red dot (line 103414)
+ *      actCycle:     number   — ACTIVITY_CYCLE enum (line 168104)
+ *      actType:      number   — ACTIVITY_TYPE enum (line 168104)
+ *      cycleType:    number   — Param untuk getActivityDetail (line 168104)
+ *      poolId:       number   — Param untuk getActivityDetail (line 168104)
+ *      endTime:      number   — Timestamp REGRESSION countdown (line 168102)
+ *      haveExReward: boolean  — Hanya actType=1001 (HAR field)
+ *      hangupReward: object   — Hanya actType=100 ITEM_DROP (line 168104)
  *    }
  *
- *  ═══════════════════════════════════════════════════
- *  CLIENT PROCESSING (Home.setActs, line 168098-168111):
+ *    FIELD YANG DI-STRIP (tidak dikirim ke client):
+ *      minDay, maxDay — server-only, untuk filtering
+ *
+ *  ═══════════════════════════════════════════════════════
+ *  CLIENT PROCESSING — Home.setActs (line 168098-168111):
  *
  *  for(var a in t._acts) {
  *    var r = t._acts[a];
- *    r.endTime → sets regressionActEndtime (only for REGRESSION type)
- *    r.id → activity UUID
- *    r.actType → routing switch:
- *      101  NEW_USER_MAIL    → sets FB share flag (o = true)
- *      5025 FB_SHARE         → checkLikeIsOn(id, actType, cycleType, poolId)
- *      5023 FBGIVELIKE       → checkLikeIsOn(id, actType, cycleType, poolId)
- *      5024 IOSGIVELIKE      → checkLikeIsOn(id, actType, cycleType, poolId)
- *      100  ITEM_DROP        → hasHangupActivityDrop=true, setHangupReward(r.hangupReward)
- *      102  FREE_INHERIT     → hasFreeInherit=true, push to inheritHeroerActBriefDataList
- *      5031 OFFLINE_ACT      → offLineActCycle=r.actCycle
- *      5033 OFFLINE_ACT_TWO  → offLineActCycleTwo=r.actCycle
- *      ALL OTHERS            → group by r.actCycle into actCycleList[r.actCycle][]
+ *    r.endTime && (e.regressActEndtime = r.endTime, e.setTimeLimitBags())
+ *    r.id → UUID
+ *    r.actType → routing:
+ *      101  NEW_USER_MAIL   → FB share flag
+ *      5025 FB_SHARE        → checkLikeIsOn(id, actType, cycleType, poolId)
+ *      5023 FBGIVELIKE      → checkLikeIsOn(id, actType, cycleType, poolId)
+ *      5024 IOSGIVELIKE     → checkLikeIsOn(id, actType, cycleType, poolId)
+ *      100  ITEM_DROP       → setHangupReward(r.hangupReward)
+ *      102  FREE_INHERIT    → push ke inheritHeroerActBriefDataList
+ *      5031 OFFLINE_ACT     → offLineActCycle = r.actCycle
+ *      5033 OFFLINE_ACT_TWO → offLineActCycleTwo = r.actCycle
+ *      ALL OTHERS           → actCycleList[r.actCycle][].push(r)
  *  }
  *
- *  After loop, unconditionally pushes these cycles if conditions met:
- *    ACTIVITY_CYCLE.FBSDKSHARE (90)  — if window.giveLikeSdk && o
- *    ACTIVITY_CYCLE.QUESTION (60)    — if user has quest data
- *    ACTIVITY_CYCLE.DOWNLOADREWARD (84) — if download award active
- *    ACTIVITY_CYCLE.YouTubeRecruit (93) — if YouTuberModel exists
- *    ACTIVITY_CYCLE.RedFoxCommunity (94) — if within time window
+ *  CLIENT PROCESSING — setActivityList (line 103401-103427):
+ *    Sort: t.sort((e,t) => t.displayIndex - e.displayIndex)
+ *    Baca: t.icon, t.poolId, t.id, t.showRed, t.actType
  *
- *  ═══════════════════════════════════════════════════
- *  CLIENT PROCESSING (backToActivityPage, line 57528-57551):
- *    Reads l.id and l.actCycle from _acts to match activity by cycle and ID.
- *    Passes matched activities as actsData to BaseActivity scene.
+ *  CLIENT PROCESSING — backToActivityPage (line 57528-57551):
+ *    Baca: l.id, l.actCycle → filter by cycle → pass ke BaseActivity
  *
- *  ═══════════════════════════════════════════════════
- *  ACTIVITY_CYCLE enum (client line 79710):
- *    0=UNKNOWN, 1=NEW_USER, 2=SERVER_OPEN, 3=WEEK, 4=RANK,
- *    5=SUMMON, 6=BE_STRONG, 7=LIMIT_HERO, 8=HOLIDAY,
- *    9=EQUIPTOTALACTIVITY, 10=SIGNTOTALACTIVITY, 11=SUMARRYGIFT,
- *    12=MERGESERVER, 13=SPECIALHOLIDY, 14=BUDOPEAK, 15=SUPERLEGEND,
- *    16=OLDUSERBACK, 17=REGRESSION, 18=ULTRA_INSTINCT, 19=WEEKEND_SIGNIN,
- *    20=WELFARE_ACCOUNT, 60=QUESTION, 84=DOWNLOADREWARD,
- *    88=FBGIVELIKE, 89=IOSGIVELIKE, 90=FBSDKSHARE,
- *    91=OFFLINEACT, 92=OFFLINEACT_TWO, 93=YouTubeRecruit,
- *    94=RedFoxCommunity, 5041=NEW_HERO_CHALLENGE
- *
- *  ACTIVITY_TYPE enum (client line 79722):
- *    0=UNKNOWN, 100=ITEM_DROP, 101=NEW_USER_MAIL, 102=FREE_INHERIT,
- *    1001=LOGIN, 1002=GROW, 1003=RECHARGE_3,
- *    2001=HERO_GIFT, 2002=HERO_ORANGE, 2003=NEW_SERVER_GIFT,
- *    2004=RECHARGE_GIFT, 2005=POWER_RANK, 2006=RECHARGE_7,
- *    2007=RECHARGE_DAILY,
- *    3001-3016 (various luck/gift/task types),
- *    4001=HERO_IMAGE_RANK, 4002=LESSON_RANK, 4003=TEMPLE_RANK,
- *    5001-5041 (various shop/equip/activity types),
- *    5037=HERO_SUPER_GIFT, 99999999=RECHARGE_MERGESERVER
+ *  CLIENT PROCESSING — costItemSkinComplete (line 168158-168234):
+ *    Baca: actCycleList[t][0].icon, .id, .poolId
  * =====================================================
  */
 
 var RH = require('../../../../shared/responseHelper');
 var logger = require('../../../../shared/utils/logger');
 var activityConfig = require('../_config');
+var ActivityManager = require('../../../activity');
 
 /**
- * Deep clone activity data to prevent config mutation.
+ * Server-only fields yang TIDAK boleh dikirim ke client.
+ * Client (main.min.js) tidak pernah membaca field ini dari brief response.
+ * Field ini hanya digunakan untuk filtering di server side.
  *
- * Creates a fresh copy of ACTS_MAP for each response so that:
- *   1. No handler can accidentally mutate the shared config
- *   2. Each user gets an independent snapshot
- *   3. Future dynamic per-user fields can be safely added
- *
- * Uses JSON.parse(JSON.stringify()) for reliability (no circular refs in activity data).
- *
- * @returns {Object} Deep cloned _acts map
+ * @type {Array<string>}
  */
-function cloneActsMap() {
-    var source = activityConfig.ACTS_MAP;
-    var cloned = {};
-    var keys = Object.keys(source);
-    for (var i = 0; i < keys.length; i++) {
-        cloned[keys[i]] = JSON.parse(JSON.stringify(source[keys[i]]));
+var SERVER_ONLY_FIELDS = ['minDay', 'maxDay'];
+
+/**
+ * Build filtered _acts map from activity config.
+ *
+ * Proses:
+ *   1. Iterasi ACTIVITY_BRIEF_LIST
+ *   2. Filter berdasarkan openServerDays (minDay/maxDay)
+ *   3. Deep clone setiap entry yang lolos filter
+ *   4. Strip server-only fields dari clone
+ *   5. Strip hangupReward jika null/undefined
+ *   6. Return sebagai map { [id]: activityObj }
+ *
+ * @returns {Object} Filtered _acts map keyed by activity UUID
+ */
+function buildFilteredActsMap() {
+    var list = activityConfig.ACTIVITY_BRIEF_LIST;
+    var actsMap = {};
+
+    for (var i = 0; i < list.length; i++) {
+        var act = list[i];
+
+        // ── Filter: cek apakah aktivitas masih dalam range hari ──
+        // ActivityManager.isActivityAvailableByDay() mengecek:
+        //   - minDay ≤ openServerDays (default minDay=1)
+        //   - openServerDays ≤ maxDay (jika maxDay > 0)
+        if (!ActivityManager.isActivityAvailableByDay(act)) {
+            continue;
+        }
+
+        // ── Deep clone: mencegah mutasi config ──
+        var entry = JSON.parse(JSON.stringify(act));
+
+        // ── Strip server-only fields ──
+        for (var j = 0; j < SERVER_ONLY_FIELDS.length; j++) {
+            delete entry[SERVER_ONLY_FIELDS[j]];
+        }
+
+        // ── Strip hangupReward jika null/undefined ──
+        // Hanya aktType=100 (ITEM_DROP) yang butuh field ini.
+        // Untuk tipe lain, hapus agar response bersih.
+        if (entry.hangupReward == null) {
+            delete entry.hangupReward;
+        }
+
+        actsMap[entry.id] = entry;
     }
-    return cloned;
+
+    return actsMap;
 }
 
 /**
  * Handle getActivityBrief request.
  *
- * Returns the complete list of active activities as a brief/catalog.
- * This is a READ-ONLY endpoint — no user state is modified.
- *
- * The response is identical for all users (static activity config).
- * Per-user state (progress, rewards claimed, etc.) is handled by
- * getActivityDetail and individual activity action handlers.
+ * Endpoint READ-ONLY — tidak mengubah state user.
+ * Response identik untuk semua user (static config + day filter).
+ * State per-user (progress, reward claimed) ditangani oleh
+ * getActivityDetail dan masing-masing action handler.
  *
  * @param {Object} socket - Socket.IO socket instance
- * @param {Object} parsed - Parsed request from client
+ * @param {Object} parsed - Parsed request dari client
  *   @param {string} parsed.type - "activity"
  *   @param {string} parsed.action - "getActivityBrief"
  *   @param {string} parsed.userId - User UUID
@@ -140,11 +163,17 @@ function cloneActsMap() {
  */
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    logger.info('ACTIVITY', 'getActivityBrief userId=' + userId);
+    var openDays = ActivityManager.getOpenServerDays();
 
-    // Build response with deep-cloned activity data
-    // Deep clone prevents accidental mutation of shared config
-    var actsData = cloneActsMap();
+    logger.info('ACTIVITY', 'getActivityBrief userId=' + userId +
+        ' openServerDays=' + openDays);
+
+    // Build filtered _acts map
+    var actsData = buildFilteredActsMap();
+
+    var actCount = Object.keys(actsData).length;
+    logger.info('ACTIVITY', 'getActivityBrief returning ' + actCount +
+        ' activities (filtered from ' + activityConfig.ACTIVITY_BRIEF_LIST.length + ')');
 
     callback(RH.success({
         type: parsed.type || 'activity',
