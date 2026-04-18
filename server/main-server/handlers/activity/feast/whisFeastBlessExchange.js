@@ -2,17 +2,17 @@
 
 /**
  * =====================================================
- *  activity/feast/whisFeastGivingFood.js
+ *  activity/feast/whisFeastBlessExchange.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: whisFeastGivingFood
- *  DESC: Give food at Whis Feast event
+ *  ACTION: whisFeastBlessExchange
+ *  DESC: Exchange blessings at Whis Feast
  *  TYPE: WRITE
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"whisFeastGivingFood", userId, actId, foodId, version }
+ *    { type:"activity", action:"whisFeastBlessExchange", userId, actId, num, propId, version }
  *
- *  CLIENT SOURCE: clickGiveBtn() (line 95089, 99674)
+ *  CLIENT SOURCE: exchange btn tap (line 99590)
  *
  *  RESPONSE (Universal):
  *    { _changeInfo: { _items: {...} },
@@ -28,7 +28,7 @@ var logger = require('../../../../shared/utils/logger');
 
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    logger.info('ACTIVITY', 'whisFeastGivingFood' + ' userId=' + userId);
+    logger.info('ACTIVITY', 'whisFeastBlessExchange' + ' userId=' + userId);
 
     // TODO: Implement business logic
 
