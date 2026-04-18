@@ -2,17 +2,17 @@
 
 /**
  * =====================================================
- *  activity/lantern/lanternBless.js
+ *  activity/lantern/lanternBlessClickTip.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: lanternBless
- *  DESC: Perform a lantern blessing
+ *  ACTION: lanternBlessClickTip
+ *  DESC: Claim lantern bless click-tip reward
  *  TYPE: WRITE
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"lanternBless", actId, userId, times, version }
+ *    { type:"activity", action:"lanternBlessClickTip", userId, actId }
  *
- *  CLIENT SOURCE: askRequest() (line 90551)
+ *  CLIENT SOURCE: ruleDesBtnTap() (line 90788)
  *
  *  RESPONSE (Universal):
  *    { _changeInfo: { _items: {...} },
@@ -28,7 +28,7 @@ var logger = require('../../../../shared/utils/logger');
 
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    logger.info('ACTIVITY', 'lanternBless' + ' userId=' + userId);
+    logger.info('ACTIVITY', 'lanternBlessClickTip' + ' userId=' + userId);
 
     // TODO: Implement business logic
 

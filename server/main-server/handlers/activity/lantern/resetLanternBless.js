@@ -2,17 +2,17 @@
 
 /**
  * =====================================================
- *  activity/lantern/lanternBless.js
+ *  activity/lantern/resetLanternBless.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: lanternBless
- *  DESC: Perform a lantern blessing
+ *  ACTION: resetLanternBless
+ *  DESC: Reset lantern bless progress
  *  TYPE: WRITE
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"lanternBless", actId, userId, times, version }
+ *    { type:"activity", action:"resetLanternBless", actId, userId }
  *
- *  CLIENT SOURCE: askRequest() (line 90551)
+ *  CLIENT SOURCE: reset btn tap (line 90682)
  *
  *  RESPONSE (Universal):
  *    { _changeInfo: { _items: {...} },
@@ -28,7 +28,7 @@ var logger = require('../../../../shared/utils/logger');
 
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    logger.info('ACTIVITY', 'lanternBless' + ' userId=' + userId);
+    logger.info('ACTIVITY', 'resetLanternBless' + ' userId=' + userId);
 
     // TODO: Implement business logic
 
