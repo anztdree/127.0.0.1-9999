@@ -2,17 +2,17 @@
 
 /**
  * =====================================================
- *  activity/recharge/buyFund.js
+ *  activity/recharge/doubleElevenGetPayReward.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: buyFund
- *  DESC: PURCHASE a growth/investment fund
+ *  ACTION: doubleElevenGetPayReward
+ *  DESC: CLAIM Double Eleven (11.11) special pay reward
  *  TYPE: WRITE
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"buyFund", actId, userId }
+ *    { type:"activity", action:"doubleElevenGetPayReward", userId, actId, rewardId, version }
  *
- *  CLIENT SOURCE: buyBtnTap() (line 91206)
+ *  CLIENT SOURCE: receiveBtn1TimeTap/2TimeTap() (line 92366, 92379)
  *
  *  RESPONSE (Universal):
  *    { _changeInfo: { _items: {...} },
@@ -28,7 +28,7 @@ var logger = require('../../../../shared/utils/logger');
 
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    logger.info('ACTIVITY', 'buyFund' + ' userId=' + userId);
+    logger.info('ACTIVITY', 'doubleElevenGetPayReward' + ' userId=' + userId);
 
     // TODO: Implement business logic
 

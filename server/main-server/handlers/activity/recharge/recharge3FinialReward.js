@@ -2,17 +2,17 @@
 
 /**
  * =====================================================
- *  activity/recharge/buyFund.js
+ *  activity/recharge/recharge3FinialReward.js
  *  Super Warrior Z Game Server — Main Server
  *
- *  ACTION: buyFund
- *  DESC: PURCHASE a growth/investment fund
+ *  ACTION: recharge3FinialReward
+ *  DESC: CLAIM final reward after completing 3-day recharge
  *  TYPE: WRITE
  *
  *  CLIENT REQUEST:
- *    { type:"activity", action:"buyFund", actId, userId }
+ *    { type:"activity", action:"recharge3FinialReward", actId, userId, pick }
  *
- *  CLIENT SOURCE: buyBtnTap() (line 91206)
+ *  CLIENT SOURCE: ActivitySetReward.recharge3DayRewardFinish() (line ~79577)
  *
  *  RESPONSE (Universal):
  *    { _changeInfo: { _items: {...} },
@@ -28,7 +28,7 @@ var logger = require('../../../../shared/utils/logger');
 
 function handle(socket, parsed, callback) {
     var userId = parsed.userId;
-    logger.info('ACTIVITY', 'buyFund' + ' userId=' + userId);
+    logger.info('ACTIVITY', 'recharge3FinialReward' + ' userId=' + userId);
 
     // TODO: Implement business logic
 
