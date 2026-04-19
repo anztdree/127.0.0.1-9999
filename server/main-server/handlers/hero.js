@@ -1372,6 +1372,44 @@ function collectPassiveAttrs(heroInfo, evolveLevel, heroData) {
  * @param {object} [gameData] - Optional user gameData for linked hero context
  * @returns {object} { _baseAttr: { _items }, _totalAttr: { _items } }
  */
+/**
+ * Compute hero power using heroPower.json weighted stat sum.
+ * Original server formula: sum(totalAttr[i]._num * heroPower[heroType][attrName].powerParam) * balancePower
+ *
+ * @param {object} heroInfo - Hero info from hero.json config
+ * @param {object} totalItems - _totalAttr._items (keyed by attr ID string)
+ * @returns {number} Power rating
+ */
+function computeStatPower(heroInfo, totalItems) {
+    if (!heroInfo || !totalItems) return 0;
+
+    var heroType = heroInfo.heroType || heroInfo.type || 'body';
+    var balancePower = heroInfo.balancePower || 1;
+
+    var heroPowerConfig = GameData.get('heroPower');
+    if (!heroPowerConfig) return 0;
+
+    // Build attName → powerParam map for this heroType
+    var powerWeights = {};
+    for (var pwKey in heroPowerConfig) {
+        var pwEntry = heroPowerConfig[pwKey];
+        if (pwEntry && String(pwEntry.heroType) === String(heroType)) {
+            powerWeights[String(pwEntry.attName)] = pwEntry.powerParam || 0;
+        }
+    }
+
+    // Sum weighted attribute values
+    var powerSum = 0;
+    for (var attrId in totalItems) {
+        var attrName = ATTR_ID_NAME[attrId] || ATTR_ID_NAME[parseInt(attrId)];
+        if (attrName && powerWeights[attrName] !== undefined) {
+            powerSum += (totalItems[attrId]._num || 0) * powerWeights[attrName];
+        }
+    }
+
+    return Math.floor(powerSum * balancePower);
+}
+
 function calculateHeroAttrs(heroData, gameData) {
     if (!heroData) return emptyAttrs();
 
@@ -1567,19 +1605,8 @@ function calculateHeroAttrs(heroData, gameData) {
     // Speed: base speed + wakeup speed + passive speed
     var totalSpeed = baseSpeed + wakeupSpeed + passiveSpeed;
 
-    // === STEP 11: zPower calculation ===
-    // zPower uses BASE quality from hero.json (static), NOT evolveLevel-based qualityIndex.
-    // Client getHeroZpowe(quality, level) passes heroQuality string from hero.json config.
-    // At guide start evolveLevel=0 → qualityIndex=1 (white), but Kid Goku base quality=purple.
-    // Using evolveLevel-based qualityIndex gives wrong para multiplier.
+    // === STEP 11: Power (zPower) — computed below after totalObj is built ===
     var zPower = 0;
-    var zpA = getConstant('zPowerFormulaParaA') || 100;
-    var zpB = getConstant('zPowerFormulaParaB') || 5;
-    var zpC = getConstant('zPowerFormulaParaC') || 10;
-    var zpD = getConstant('zPowerFormulaParaD') || 35;
-    var zpQualityPara = getZPowerQualityPara(QUALITY_INDEX[baseQuality] || 1);
-    zPower = (zpA + level * Math.pow(zpB, 1 + Math.ceil(level / zpC) / zpD)) * zpQualityPara;
-    zPower = Math.floor(zPower);
 
     // === STEP 12: EnergyMax from hero.json ===
     var heroEnergyMax = (heroInfo && heroInfo.energyMax) ? heroInfo.energyMax : 0;
@@ -1666,7 +1693,9 @@ function calculateHeroAttrs(heroData, gameData) {
         }
     }
 
-    // ID 21: Power (combat rating / zPower)
+    // ID 21: Power — stat-based using heroPower.json weights
+    // Formula: sum(totalAttr[i]._num * heroPower[heroType].powerParam) * balancePower
+    zPower = computeStatPower(heroInfo, totalObj);
     totalObj['21'] = { _id: 21, _num: zPower };
 
     // ID 22: orghp — effective HP after talent, always equals totalHP per HAR
@@ -2300,25 +2329,9 @@ function calculateHeroPower(heroData) {
 
     var attrs = calculateHeroAttrs(heroData);
     var totalItems = attrs._totalAttr._items || {};
-
-    // BUG FIX: _totalAttr._items is an OBJECT (keyed by attr ID string), NOT an array.
-    // Old code iterated with for(i=0; i<totalItems.length; i++) which NEVER executed
-    // because objects don't have a meaningful .length. Now reads by key.
-    var hp = 0, attack = 0, armor = 0;
-    if (totalItems['0']) hp = totalItems['0']._num || 0;
-    if (totalItems['1']) attack = totalItems['1']._num || 0;
-    if (totalItems['2']) armor = totalItems['2']._num || 0;
-
-    var paraA = getConstant('zPowerFormulaParaA') || 100;
-    var paraB = getConstant('zPowerFormulaParaB') || 5;
-    var paraC = getConstant('zPowerFormulaParaC') || 10;
-    var paraD = getConstant('zPowerFormulaParaD') || 35;
-
     var heroInfo = getHeroInfo(heroData._heroDisplayId);
-    var balancePower = heroInfo ? (heroInfo.balancePower || 1) : 1;
 
-    var basePower = (hp / paraA + attack / paraB + armor / paraC) * paraD;
-    return Math.floor(basePower * balancePower);
+    return computeStatPower(heroInfo, totalItems);
 }
 
 // =============================================
@@ -6318,44 +6331,11 @@ function removeHeroFromAllTeams(gameData, heroId) {
 function calculateFullHeroPower(heroData, gameData) {
     if (!heroData) return 0;
 
-    // Get total attributes
     var attrs = calculateHeroAttrs(heroData, gameData);
-    var totalItems = attrs._totalAttr._items || [];
-
-    var hp = 0, attack = 0, armor = 0;
-    for (var i = 0; i < totalItems.length; i++) {
-        if (totalItems[i]._id === 0) hp = totalItems[i]._num || 0;
-        else if (totalItems[i]._id === 1) attack = totalItems[i]._num || 0;
-        else if (totalItems[i]._id === 2) armor = totalItems[i]._num || 0;
-    }
-
-    // Power formula parameters
-    var paraA = getConstant('zPowerFormulaParaA') || 100;
-    var paraB = getConstant('zPowerFormulaParaB') || 5;
-    var paraC = getConstant('zPowerFormulaParaC') || 10;
-    var paraD = getConstant('zPowerFormulaParaD') || 35;
-
-    // Hero-specific balance power
+    var totalItems = attrs._totalAttr._items || {};
     var heroInfo = getHeroInfo(heroData._heroDisplayId);
-    var balancePower = heroInfo ? (heroInfo.balancePower || 1) : 1;
 
-    // Talent bonus from wakeUp
-    var talentBonus = 0;
-    var wakeEntries = getWakeUpConfig(heroData._heroDisplayId);
-    var currentStar = heroData._heroStar || 0;
-    for (var w = 0; w < wakeEntries.length; w++) {
-        if (wakeEntries[w].star && wakeEntries[w].star <= currentStar) {
-            talentBonus += wakeEntries[w].talent || 0;
-        }
-    }
-
-    // Base power calculation
-    var basePower = (hp / paraA + attack / paraB + armor / paraC) * paraD;
-
-    // Apply balance and talent multipliers
-    var finalPower = basePower * balancePower * (1 + talentBonus);
-
-    return Math.floor(finalPower);
+    return computeStatPower(heroInfo, totalItems);
 }
 
 /**
