@@ -183,6 +183,18 @@ async function enterGame(socket, parsed, callback) {
         // serverOpenDate — set on first login, preserved after
         playerData.serverOpenDate = playerData.serverOpenDate || now;
 
+        // FIX: guide._id MUST be userId (not empty string)
+        // Client Home.initAll() at line 167178:
+        //   if(0 != GuideInfoManager.getInstance().startGuide()) { ... e.setActs() ... }
+        // startGuide() returns 0 when guide._id is empty → ENTIRE Home init SKIPS
+        // → no activity icons, no battle/summon buttons, nothing renders!
+        if (playerData.guide) {
+            if (!playerData.guide._id) {
+                playerData.guide._id = userId;
+                logger.info('USER', 'enterGame: fixed guide._id for userId=' + userId);
+            }
+        }
+
         // =============================================
         // Step 4: Save to database
         // =============================================
