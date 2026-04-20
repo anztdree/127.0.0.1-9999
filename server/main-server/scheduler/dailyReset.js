@@ -110,23 +110,35 @@ var SPECIAL_DEFAULTS = {
 };
 
 /**
- * Calculate milliseconds until next 6:00 AM.
+ * Calculate milliseconds until next 6:00 AM server local time.
  *
  * Reset time from constant.json: resetTime = "6:00:00"
+ * Server timezone from .env: SERVER_UTC_OFFSET_MS (default: -25200000 = UTC+7)
  *
- * @returns {number} Milliseconds until next 6:00 AM
+ * TIMEZONE-INDEPENDENT: Does NOT rely on the machine's local timezone.
+ * Uses pure math to compute the next 6 AM in the configured server timezone.
+ *
+ * @returns {number} Milliseconds until next 6:00 AM server time
  */
 function getTimeUntilNextReset() {
-    var now = new Date();
-    var reset = new Date(now);
-    reset.setHours(6, 0, 0, 0);
-
-    // If we're past 6 AM today, next reset is tomorrow
-    if (now >= reset) {
-        reset.setDate(reset.getDate() + 1);
+    var offset = parseInt(process.env.SERVER_UTC_OFFSET_MS) || -25200000;
+    // offset is negative (e.g., -25200000 for UTC+7)
+    // To convert UTC ms to server local wall clock ms: utc + |offset|
+    var tzOffsetMs = Math.abs(offset);
+    var MS_PER_DAY = 86400000;
+    var now = Date.now();
+    var serverLocalNow = now + tzOffsetMs;
+    // Today's midnight in server local time
+    var todayMidnight = Math.floor(serverLocalNow / MS_PER_DAY) * MS_PER_DAY;
+    // 6 AM today in server local time
+    var sixAMLocal = todayMidnight + 6 * 3600000;
+    // If 6 AM already passed today, use tomorrow
+    if (sixAMLocal <= serverLocalNow) {
+        sixAMLocal += MS_PER_DAY;
     }
-
-    return reset.getTime() - now.getTime();
+    // Convert back to UTC ms and calculate difference
+    var sixAMUTC = sixAMLocal - tzOffsetMs;
+    return sixAMUTC - now;
 }
 
 /**
@@ -290,30 +302,41 @@ async function resetUser(userId, serverId) {
 /**
  * Check if a user needs daily reset.
  *
- * Compares user's last reset time against the 6:00 AM threshold.
- * If the last reset was before today's 6:00 AM, reset is needed.
+ * Compares user's last login time against the 6:00 AM server local threshold.
+ * If the last login was before today's 6:00 AM server time, reset is needed.
+ *
+ * TIMEZONE-INDEPENDENT: Does NOT rely on the machine's local timezone.
+ * Uses pure math to compute 6 AM in the configured server timezone.
  *
  * @param {object} gameData - User's game_data object
  * @returns {boolean} true if daily reset is needed
  */
 function needsReset(gameData) {
-    if (!gameData || !gameData.user) {
+    if (!gameData || !gameData.scheduleInfo) {
         return false;
     }
 
-    var lastLogin = gameData.user._lastLoginTime || 0;
-    if (lastLogin === 0) {
-        return false; // New user, no reset needed
+    var lastResetTime = gameData.scheduleInfo._refreshTime || 0;
+    if (lastResetTime === 0) {
+        return false; // No reset recorded yet
     }
 
-    var lastLoginDate = new Date(lastLogin);
-    var now = new Date();
+    // Calculate current 6 AM server time in UTC ms
+    var offset = parseInt(process.env.SERVER_UTC_OFFSET_MS) || -25200000;
+    var tzOffsetMs = Math.abs(offset);
+    var MS_PER_DAY = 86400000;
+    var now = Date.now();
+    var serverLocalNow = now + tzOffsetMs;
+    var todayMidnight = Math.floor(serverLocalNow / MS_PER_DAY) * MS_PER_DAY;
+    var sixAMLocal = todayMidnight + 6 * 3600000;
+    // If 6 AM hasn't happened yet today, use yesterday
+    if (sixAMLocal > serverLocalNow) {
+        sixAMLocal -= MS_PER_DAY;
+    }
+    var sixAMUTC = sixAMLocal - tzOffsetMs;
 
-    // Check if last login was before today's 6:00 AM
-    var todayReset = new Date(now);
-    todayReset.setHours(6, 0, 0, 0);
-
-    return lastLoginDate < todayReset;
+    // Need reset if last reset was before current 6 AM
+    return lastResetTime < sixAMUTC;
 }
 
 module.exports = {
