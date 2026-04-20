@@ -788,7 +788,48 @@ async function closePool() {
 
 
 // ================================================================
-// 8. PROCESS CLEANUP
+// 8. TOKEN CLEANUP (periodic)
+//
+// FIX: DB-13 — Expired and used tokens accumulate forever in login_tokens.
+// Clean them up periodically to prevent table bloat.
+// Runs every 1 hour (3600000ms).
+// ================================================================
+
+var _tokenCleanupInterval = null;
+
+function startTokenCleanup() {
+    if (_tokenCleanupInterval) return;
+    _tokenCleanupInterval = setInterval(async function () {
+        if (!pool || !ready) return;
+        try {
+            // Delete tokens that are expired OR already used (older than 24 hours)
+            var cutoffTime = Date.now() - 86400000; // 24 hours ago
+            var result = await pool.query(
+                'DELETE FROM login_tokens WHERE expires_at < ? OR used = 1 AND created_at < ?',
+                [cutoffTime, cutoffTime]
+            );
+            if (result && result.affectedRows > 0) {
+                logger.info('DB', 'Token cleanup: removed ' + result.affectedRows + ' expired/used tokens');
+            }
+        } catch (err) {
+            logger.warn('DB', 'Token cleanup error: ' + err.message);
+        }
+    }, 3600000); // Every 1 hour
+}
+
+function stopTokenCleanup() {
+    if (_tokenCleanupInterval) {
+        clearInterval(_tokenCleanupInterval);
+        _tokenCleanupInterval = null;
+    }
+}
+
+// Start cleanup on module load
+startTokenCleanup();
+
+
+// ================================================================
+// 9. PROCESS CLEANUP
 //
 // FIX: DB-11 — login-server has no SIGINT/SIGTERM handler,
 // so closePool() is never called. This ensures the pool is
@@ -809,6 +850,7 @@ process.on('exit', function () {
         pool = null;
         ready = false;
     }
+    stopTokenCleanup();
 });
 
 
