@@ -14,7 +14,6 @@
  *    5. Push notification system (Notify event)
  *    6. Scheduler system (daily reset, recovery, activity)
  *    7. Room management (team dungeon)
- *    8. Activity manager (open server days)
  *
  *  Perbedaan dengan Login Server:
  *    - Wajib TEA verification sebelum request diproses
@@ -86,7 +85,6 @@ var TEA = require('../shared/tea');
 // =============================================
 var Notifications = require('./notifications');
 var Scheduler = require('./scheduler');
-var ActivityManager = require('../shared/activityManager');
 var Rooms = require('./rooms');
 
 // =============================================
@@ -187,7 +185,6 @@ var server = http.createServer(function (req, res) {
             activeConnections: activeConnections,
             handlersLoaded: Object.keys(handlers).length,
             roomsActive: Rooms.getRoomCount(),
-            openServerDays: ActivityManager.getOpenServerDays(),
             timestamp: new Date().toISOString()
         }));
         return;
@@ -639,10 +636,6 @@ async function startServer() {
         console.error('[Startup] Server will start but game data will not be available.');
     }
 
-    // Step 2b: Initialize activity manager
-    console.log('[Startup] Initializing activity manager...');
-    ActivityManager.init();
-
     // Step 3: Start HTTP server
     server.listen(SERVER_PORT, SERVER_HOST, function () {
         // Step 3b: Initialize scheduler systems (after server is listening)
@@ -686,7 +679,6 @@ async function startServer() {
         console.log('    Notifications: ' + Object.keys(Notifications.NOTIFY_ACTION).length + ' action types');
         console.log('    Scheduler:     ACTIVE (daily reset, recovery, activity)');
         console.log('    Rooms:         Team dungeon room manager ready');
-        console.log('    Activity:      Open day ' + ActivityManager.getOpenServerDays());
         console.log('================================================');
         console.log('');
         console.log('  Waiting for client connections...');
