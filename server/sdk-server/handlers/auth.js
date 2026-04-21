@@ -1,48 +1,47 @@
 /**
  * ============================================================================
- *  SDK Server v3 — Auth Handlers
- *  ============================================================================
+ * SDK Server — Auth Handlers (Natural Implementation)
+ * ============================================================================
  *
- *  Endpoints:
- *    POST /api/auth/register  — Register new user
- *    POST /api/auth/login     — Login registered user
- *    POST /api/auth/guest     — Auto-login / create guest
- *    POST /api/auth/logout    — Destroy session
- *    GET  /api/auth/check     — Validate session
+ * Endpoints:
+ * POST /api/auth/register — Register new user
+ * POST /api/auth/login — Login registered user
+ * POST /api/auth/guest — Auto-login / create guest
+ * POST /api/auth/logout — Destroy session
+ * GET /api/auth/check — Validate session
  *
- *  CRITICAL: Response field names MUST match main.min.js expectations:
- *    - "userId"    — main.min.js line 88556: o.userId
- *    - "sign"      — main.min.js line 88557: o.sign
- *    - "sdk"       — main.min.js line 88564: o.sdk (NOT "channelCode")
- *    - "loginToken" — main.min.js line 88723: e.loginToken (camelCase)
- *    - "nickName"  — main.min.js line 88725: e.nickName (camelCase N)
- *    - "security"  — main.min.js line 88728: e.security
+ * Natural approach:
+ * - Clean error handling without exposing internals
+ * - Timing-safe password comparison
+ * - Proper session management
  *
- *  Full login flow:
- *    1. sdk.js login UI → POST /api/auth/login (or /guest)
- *    2. Server returns { userId, sign, sdk, loginToken, nickName, security }
- *    3. sdk.js redirects: ?sdk=ppgame&logintoken=X&nickname=X&userid=X&sign=X&security=X
- *    4. index.html getSdkLoginInfo() reads URL params
- *    5. main.min.js: checkSDK()=true → sdkLoginSuccess(o)
- *    6. main.min.js: ts.loginUserInfo = { userId, sign, sdk, serverId, serverName }
- *    7. main.min.js: ts.loginInfo.userInfo = { loginToken, userId, nickName, channelCode: o.sdk, securityCode: o.security }
- *    8. main.min.js: ts.clientRequestServerList(userId, sdk, callback)
+ * CRITICAL: Response field names MUST match main.min.js expectations:
+ * - "userId" — main.min.js line 88556
+ * - "sign" — main.min.js line 88557
+ * - "sdk" — main.min.js line 88564 (NOT "channelCode")
+ * - "loginToken" — main.min.js line 88723 (camelCase)
+ * - "nickName" — main.min.js line 88725 (camelCase N)
+ * - "security" — main.min.js line 88728
  *
  * ============================================================================
  */
 
-var userManager = require('../services/userManager');
-var sessionManager = require('../services/sessionManager');
-var cryptoUtil = require('../utils/crypto');
-var CONSTANTS = require('../config/constants');
-var logger = require('../utils/logger');
+const userManager = require('../services/userManager');
+const sessionManager = require('../services/sessionManager');
+const cryptoUtil = require('../utils/crypto');
+const CONSTANTS = require('../config/constants');
+const logger = require('../utils/logger');
 
 // =============================================
-// HELPER
+// RESPONSE BUILDER
 // =============================================
 
 /**
- * Build standard login response — exact field names for main.min.js.
+ * Build standard login response with exact field names for main.min.js
+ * 
+ * @param {Object} user - User object from userManager
+ * @param {string} loginToken - Current login token
+ * @returns {Object} Login response data
  */
 function buildLoginResponse(user, loginToken) {
     return {
@@ -55,151 +54,219 @@ function buildLoginResponse(user, loginToken) {
     };
 }
 
+/**
+ * Send success response
+ * 
+ * @param {Object} res - Express response
+ * @param {Object} data - Response data
+ * @param {Object} extra - Extra fields to merge
+ */
+function sendSuccess(res, data, extra = {}) {
+    res.json({
+        success: true,
+        ...extra,
+        data
+    });
+}
+
+/**
+ * Send error response (doesn't reveal internal details)
+ * 
+ * @param {Object} res - Express response
+ * @param {string} message - User-friendly error message
+ * @param {number} statusCode - HTTP status code (default 400)
+ */
+function sendError(res, message, statusCode = 400) {
+    res.status(statusCode).json({
+        success: false,
+        message
+    });
+}
+
 // =============================================
 // POST /api/auth/register
 // =============================================
 
+/**
+ * Register new user
+ * 
+ * Flow:
+ * 1. Validate input
+ * 2. Check username availability
+ * 3. Create user
+ * 4. Create session
+ * 5. Return login response
+ */
 function register(req, res) {
-    var username = cryptoUtil.sanitizeUsername(req.body.username);
-    var password = req.body.password;
+    const { username, password } = req.body;
 
-    if (!username || username.length < CONSTANTS.USERNAME_MIN_LENGTH) {
-        return res.json({ success: false, message: 'Username minimal ' + CONSTANTS.USERNAME_MIN_LENGTH + ' karakter' });
-    }
-    if (username.length > CONSTANTS.USERNAME_MAX_LENGTH) {
-        return res.json({ success: false, message: 'Username maksimal ' + CONSTANTS.USERNAME_MAX_LENGTH + ' karakter' });
-    }
-    if (!CONSTANTS.USERNAME_PATTERN.test(username)) {
-        return res.json({ success: false, message: 'Username hanya boleh huruf, angka, dan underscore' });
-    }
-    if (!password || password.length < CONSTANTS.PASSWORD_MIN_LENGTH) {
-        return res.json({ success: false, message: 'Password minimal ' + CONSTANTS.PASSWORD_MIN_LENGTH + ' karakter' });
-    }
-    if (password.length > CONSTANTS.PASSWORD_MAX_LENGTH) {
-        return res.json({ success: false, message: 'Password maksimal ' + CONSTANTS.PASSWORD_MAX_LENGTH + ' karakter' });
+    // Validate username
+    const usernameValidation = cryptoUtil.validateUsername(username);
+    if (!usernameValidation.valid) {
+        return sendError(res, usernameValidation.message);
     }
 
-    var existing = userManager.findByUsername(username);
-    if (existing) {
-        return res.json({ success: false, message: 'Username "' + username + '" sudah digunakan' });
+    // Validate password
+    const passwordValidation = cryptoUtil.validatePassword(password);
+    if (!passwordValidation.valid) {
+        return sendError(res, passwordValidation.message);
     }
 
-    var result = userManager.createRegistered(username, password);
+    // Check if username exists
+    if (userManager.usernameExists(usernameValidation.username)) {
+        return sendError(res, `Username "${usernameValidation.username}" sudah digunakan`);
+    }
+
+    // Create user
+    const result = userManager.createRegistered(
+        usernameValidation.username,
+        password
+    );
+
     if (result.error) {
-        return res.json({ success: false, message: result.error });
+        return sendError(res, result.error);
     }
 
-    var user = result.user;
+    const user = result.user;
+
+    // Create session
     sessionManager.create(user.id, user.lastToken);
 
-    logger.info('Auth', 'Registered: ' + username + ' (ID: ' + user.id + ')');
+    logger.info('Auth', `Registered: ${user.username} (ID: ${user.id})`);
 
-    return res.json({
-        success: true,
-        data: buildLoginResponse(user, user.lastToken)
-    });
+    return sendSuccess(res, buildLoginResponse(user, user.lastToken));
 }
 
 // =============================================
 // POST /api/auth/login
 // =============================================
 
+/**
+ * Login registered user
+ * 
+ * Flow:
+ * 1. Validate input
+ * 2. Find user by username
+ * 3. Verify password (timing-safe)
+ * 4. Generate new token
+ * 5. Update user
+ * 6. Destroy old sessions (prevent orphans)
+ * 7. Create new session
+ * 8. Return login response
+ */
 function login(req, res) {
-    var username = cryptoUtil.sanitizeUsername(req.body.username);
-    var password = req.body.password;
+    const { username, password } = req.body;
 
-    if (!username || username.length < CONSTANTS.USERNAME_MIN_LENGTH) {
-        return res.json({ success: false, message: 'Username minimal ' + CONSTANTS.USERNAME_MIN_LENGTH + ' karakter' });
-    }
-    if (!password) {
-        return res.json({ success: false, message: 'Password diperlukan' });
+    // Validate input exists
+    if (!username || !password) {
+        return sendError(res, 'Username dan password diperlukan');
     }
 
-    var found = userManager.findByUsername(username);
+    // Sanitize and find user
+    const sanitizedUsername = cryptoUtil.sanitizeUsername(username);
+    if (sanitizedUsername.length < CONSTANTS.USERNAME_MIN_LENGTH) {
+        return sendError(res, 'Username minimal ' + CONSTANTS.USERNAME_MIN_LENGTH + ' karakter');
+    }
+
+    // Find user
+    const found = userManager.findByUsername(sanitizedUsername);
     if (!found) {
-        // Security: don't reveal if username exists
-        return res.json({ success: false, message: 'Username atau password salah' });
+        // Don't reveal if username exists - generic error
+        return sendError(res, 'Username atau password salah');
     }
 
-    // Timing-safe password verification
+    // Verify password (timing-safe)
     if (!cryptoUtil.verifyPassword(password, found.user.salt, found.user.passwordHash)) {
-        logger.warn('Auth', 'Failed login: ' + username);
-        return res.json({ success: false, message: 'Username atau password salah' });
+        logger.warn('Auth', `Failed login attempt: ${sanitizedUsername}`);
+        return sendError(res, 'Username atau password salah');
     }
 
     // Generate new token
-    var loginToken = cryptoUtil.generateLoginToken();
-    var updatedUser = userManager.updateAfterLogin(found.key, loginToken);
+    const loginToken = cryptoUtil.generateLoginToken();
 
+    // Update user with new token
+    const updatedUser = userManager.updateAfterLogin(found.key, loginToken);
     if (!updatedUser) {
-        return res.json({ success: false, message: 'Storage error — gagal update login' });
+        return sendError(res, 'Gagal mengupdate session. Silakan coba lagi.', 500);
     }
 
-    // v3 FIX: Destroy ALL old sessions for this user before creating new one
-    var destroyed = sessionManager.destroyAllByUserId(updatedUser.id);
+    // Clean up old sessions BEFORE creating new one (atomic approach)
+    const destroyed = sessionManager.destroyAllByUserId(updatedUser.id);
     if (destroyed > 0) {
-        logger.info('Auth', 'Cleaned ' + destroyed + ' old sessions for ' + username);
+        logger.info('Auth', `Cleaned ${destroyed} old sessions for ${updatedUser.username}`);
     }
 
+    // Create new session
     sessionManager.create(updatedUser.id, loginToken);
 
-    logger.info('Auth', 'Login: ' + username + ' (ID: ' + updatedUser.id + ')');
+    logger.info('Auth', `Login: ${updatedUser.username} (ID: ${updatedUser.id})`);
 
-    return res.json({
-        success: true,
-        data: buildLoginResponse(updatedUser, loginToken)
-    });
+    return sendSuccess(res, buildLoginResponse(updatedUser, loginToken));
 }
 
 // =============================================
 // POST /api/auth/guest
 // =============================================
 
+/**
+ * Guest login - auto create or return existing
+ * 
+ * Flow:
+ * 1. Validate deviceId
+ * 2. Check if device already has guest account
+ * 3a. If exists: update token, clean old sessions
+ * 3b. If not: create new guest user
+ * 4. Create session
+ * 5. Return login response with returning flag
+ */
 function guest(req, res) {
-    var deviceId = req.body.deviceId;
+    const { deviceId } = req.body;
 
+    // Validate deviceId
     if (!deviceId || typeof deviceId !== 'string' || deviceId.length < 3) {
-        return res.json({ success: false, message: 'Device ID diperlukan' });
+        return sendError(res, 'Device ID diperlukan (minimal 3 karakter)');
     }
 
-    var existing = userManager.findByDeviceId(deviceId);
+    // Sanitize deviceId
+    const sanitizedDeviceId = deviceId.trim().substring(0, 64);
+
+    // Check if device already has guest account
+    const existing = userManager.findByDeviceId(sanitizedDeviceId);
 
     if (existing) {
-        // Returning user — generate new token
-        var loginToken = cryptoUtil.generateLoginToken();
-        var updatedUser = userManager.updateAfterLogin(existing.key, loginToken);
+        // Returning guest - generate new token
+        const loginToken = cryptoUtil.generateLoginToken();
+        const updatedUser = userManager.updateAfterLogin(existing.key, loginToken);
 
         if (!updatedUser) {
-            return res.json({ success: false, message: 'Storage error' });
+            return sendError(res, 'Gagal mengupdate session. Silakan coba lagi.', 500);
         }
 
-        // v3 FIX: Destroy old sessions
+        // Clean old sessions
         sessionManager.destroyAllByUserId(updatedUser.id);
+
+        // Create new session
         sessionManager.create(updatedUser.id, loginToken);
 
-        logger.info('Auth', 'Guest returning: ' + updatedUser.username + ' (ID: ' + updatedUser.id + ')');
+        logger.info('Auth', `Guest returning: ${updatedUser.username} (ID: ${updatedUser.id})`);
 
-        return res.json({
-            success: true,
-            data: buildLoginResponse(updatedUser, loginToken),
+        return sendSuccess(res, buildLoginResponse(updatedUser, loginToken), {
             returning: true
         });
     }
 
     // New guest user
-    var result = userManager.createGuest(deviceId);
-    if (!result) {
-        return res.json({ success: false, message: 'Gagal membuat guest user' });
+    const user = userManager.createGuest(sanitizedDeviceId);
+    if (!user) {
+        return sendError(res, 'Gagal membuat guest account. Silakan coba lagi.', 500);
     }
 
-    var user = result.user;
-    sessionManager.create(user.id, user.lastToken);
+    // Create session
+    sessionManager.create(user.user.id, user.user.lastToken);
 
-    logger.info('Auth', 'Guest created: ' + user.username + ' (ID: ' + user.id + ')');
+    logger.info('Auth', `Guest created: ${user.user.username} (ID: ${user.user.id})`);
 
-    return res.json({
-        success: true,
-        data: buildLoginResponse(user, user.lastToken),
+    return sendSuccess(res, buildLoginResponse(user.user, user.user.lastToken), {
         returning: false
     });
 }
@@ -208,38 +275,193 @@ function guest(req, res) {
 // POST /api/auth/logout
 // =============================================
 
+/**
+ * Logout user
+ * 
+ * Flow:
+ * 1. Extract loginToken from body
+ * 2. Destroy session
+ * 3. Return success (always, even if session didn't exist)
+ */
 function logout(req, res) {
-    var loginToken = req.body.loginToken;
+    const { loginToken } = req.body;
 
     if (loginToken) {
-        sessionManager.destroy(loginToken);
-        logger.info('Auth', 'Logout: ' + loginToken.substring(0, 16) + '...');
+        const destroyed = sessionManager.destroy(loginToken);
+        if (destroyed) {
+            logger.info('Auth', `Logout: ${loginToken.substring(0, 16)}...`);
+        }
     }
 
-    return res.json({ success: true });
+    // Always return success (idempotent)
+    return res.json({
+        success: true,
+        message: 'Logout berhasil'
+    });
 }
 
 // =============================================
 // GET /api/auth/check
 // =============================================
 
+/**
+ * Check if session is valid
+ * 
+ * Flow:
+ * 1. Extract userId and loginToken from query
+ * 2. Validate session
+ * 3. Return status
+ */
 function check(req, res) {
-    var userId = req.query.userId;
-    var loginToken = req.query.loginToken;
+    const { userId, loginToken } = req.query;
 
+    // Validate parameters
     if (!userId || !loginToken) {
-        return res.json({ success: false, message: 'userId dan loginToken diperlukan' });
+        return res.json({
+            success: false,
+            valid: false,
+            message: 'userId dan loginToken diperlukan'
+        });
     }
 
-    var valid = sessionManager.validate(userId, loginToken);
+    // Validate session
+    const valid = sessionManager.validate(userId, loginToken);
 
-    return res.json({ success: true, valid: valid });
+    if (valid) {
+        return res.json({
+            success: true,
+            valid: true,
+            message: 'Session valid'
+        });
+    }
+
+    // Get session to determine if expired or just invalid
+    const session = sessionManager.get(loginToken);
+
+    return res.json({
+        success: true,
+        valid: false,
+        expired: session ? Date.now() > session.expiresAt : true,
+        message: session ? 'Session expired' : 'Session tidak valid'
+    });
 }
 
+// =============================================
+// POST /api/auth/refresh
+// =============================================
+
+/**
+ * Refresh session (extend expiration)
+ * 
+ * Flow:
+ * 1. Validate session
+ * 2. Extend session
+ * 3. Return success
+ */
+function refresh(req, res) {
+    const { userId, loginToken } = req.body;
+
+    if (!userId || !loginToken) {
+        return sendError(res, 'userId dan loginToken diperlukan');
+    }
+
+    // Validate first
+    if (!sessionManager.validate(userId, loginToken)) {
+        return sendError(res, 'Session tidak valid atau expired', 401);
+    }
+
+    // Extend session
+    const extended = sessionManager.extend(loginToken);
+    if (!extended) {
+        return sendError(res, 'Gagal memperbarui session', 500);
+    }
+
+    logger.info('Auth', `Session refreshed: ${userId}`);
+
+    return res.json({
+        success: true,
+        message: 'Session diperbarui'
+    });
+}
+
+// =============================================
+// POST /api/auth/convert-guest
+// =============================================
+
+/**
+ * Convert guest account to registered account
+ * 
+ * Flow:
+ * 1. Validate session (must be guest)
+ * 2. Validate new username/password
+ * 3. Convert account
+ * 4. Update session
+ * 5. Return login response
+ */
+function convertGuest(req, res) {
+    const { userId, loginToken, username, password } = req.body;
+
+    // Validate session first
+    if (!userId || !loginToken) {
+        return sendError(res, 'userId dan loginToken diperlukan');
+    }
+
+    if (!sessionManager.validate(userId, loginToken)) {
+        return sendError(res, 'Session tidak valid', 401);
+    }
+
+    // Find user
+    const userData = userManager.findById(userId);
+    if (!userData) {
+        return sendError(res, 'User tidak ditemukan', 404);
+    }
+
+    if (!userData.user.isGuest) {
+        return sendError(res, 'Akun sudah terdaftar');
+    }
+
+    // Validate new credentials
+    const usernameValidation = cryptoUtil.validateUsername(username);
+    if (!usernameValidation.valid) {
+        return sendError(res, usernameValidation.message);
+    }
+
+    const passwordValidation = cryptoUtil.validatePassword(password);
+    if (!passwordValidation.valid) {
+        return sendError(res, passwordValidation.message);
+    }
+
+    // Convert
+    const result = userManager.convertGuestToRegistered(
+        userData.key,
+        usernameValidation.username,
+        password
+    );
+
+    if (result.error) {
+        return sendError(res, result.error);
+    }
+
+    // Update session with new token
+    const newToken = cryptoUtil.generateLoginToken();
+    sessionManager.destroy(loginToken);
+    sessionManager.create(userId, newToken);
+
+    logger.info('Auth', `Guest converted: ${usernameValidation.username} (ID: ${userId})`);
+
+    return sendSuccess(res, buildLoginResponse(result.user, newToken));
+}
+
+// =============================================
+// EXPORT
+// =============================================
+
 module.exports = {
-    register: register,
-    login: login,
-    guest: guest,
-    logout: logout,
-    check: check
+    register,
+    login,
+    guest,
+    logout,
+    check,
+    refresh,
+    convertGuest
 };
