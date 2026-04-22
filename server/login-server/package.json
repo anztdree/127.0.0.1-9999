@@ -1,10 +1,14 @@
 {
   "name": "login-server",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Super Warrior Z — Login Server (Port 8000, Socket.IO, No TEA)",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "node index.js --dev"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
@@ -12,5 +16,11 @@
     "lz-string": "^1.5.0",
     "mariadb": "^3.3.1",
     "socket.io": "^2.5.1"
-  }
+  },
+  "keywords": [
+    "super-warrior-z",
+    "login-server",
+    "game"
+  ],
+  "license": "MIT"
 }
