@@ -1,163 +1,49 @@
 /**
  * ============================================================================
- *  Login Server — Super Warrior Z (Dragon Ball Z)
- *  Port 8000 — Socket.IO v2, NO TEA encryption
- *  Version: 3.0 — ROOT CAUSE FIX: Engine.IO CORS override
+ * Login Server — Entry Point (Natural Implementation v2.0)
+ * Port 8000 — Socket.IO v2, NO TEA encryption
  * ============================================================================
  *
- *  ROOT CAUSE (v3.0 — CONFIRMED by reading all source):
- *  ──────────────────────────────────────────────────────
- *  Socket.IO v2 uses Engine.IO v3 internally.
- *  Engine.IO v3 handles polling requests in polling.js:
- *
- *    res.writeHead(200, {
- *      'Access-Control-Allow-Origin': '*',
- *      ...
- *    });
- *
- *  When origins:'*:*' is set, Engine.IO sets ACAO:* on EVERY polling
- *  response (GET/POST data, not just OPTIONS preflight).
- *
- *  Express CORS middleware sets correct headers FIRST, but Engine.IO's
- *  res.writeHead() OVERWRITES them because writeHead replaces headers.
- *
- *  Client bundled code (Engine.IO client) sends:
- *    xhr.withCredentials = true
- *
- *  Browser CORS policy REJECTS response when ACAO:* + credentials:true.
- *  Result: "xhr poll error"
- *
- *  PREVIOUS FIX ATTEMPTS (v1, v2) FAILED because:
- *  - Express CORS middleware runs FIRST but gets OVERWRITTEN by Engine.IO
- *  - handlePreflightRequest only handles OPTIONS, not actual GET/POST
- *  - cookie:false doesn't help — withCredentials is hardcoded in client
- *
- *  V3 FIX:
- *  Monkey-patch http.ServerResponse.prototype.writeHead to intercept
- * ALL responses (including from Engine.IO) and fix CORS headers
- * BEFORE they're sent to the browser.
- *
- *  CLIENT CONNECTION FLOW (from main.min.js):
- *  ─────────────────────────────────────────
- *  1. TSBrowser.executeFunction("getLoginServer") → sdk.js returns null
- *  2. RES.getResByUrl("serversetting.json") → {loginserver:"http://127.0.0.1:8000"}
- *  3. loginClient.connectToServer("http://127.0.0.1:8000")
- *  4. Socket.IO v2 client → EIO=3 → transport=polling → xhr withCredentials:true
- *  5. Server responds → browser checks CORS → MUST have ACAO=origin (not *)
- *  6. NO TEA on login: verifyEnable=false → no "verify" event handshake
- *
- *  SDK LOGIN PATH:
- *     sdk.js → getSdkLoginInfo() → URL params →
- *     sdkLoginSuccess() → ts.loginInfo.userInfo set →
- *     clientRequestServerList → [GetServerList] →
- *     getNotice → [LoginAnnounce] →
- *     startBtnTap → [SaveHistory] →
- *     ts.loginClient.destroy() + ts.clientStartGame(false) → main-server
- *
- *  ACTIONS (6 total):
- *     loginGame          → auto-register + login + token
- *     GetServerList      → server selection screen
- *     SaveHistory        → token refresh + daily login count
- *     LoginAnnounce      → notices (default: empty)
- *     SaveLanguage       → language preference
- *     SaveUserEnterInfo  → analytics (after enterGame)
- *
- *  RESPONSE FORMAT:
- *     { ret: 0, data: "JSON_STRING", compress: boolean, serverTime, server0Time }
- *
- *  ARCHITECTURE:
- *     Fully standalone — NO shared/ dependencies
- *     MariaDB for persistent data (users, login_tokens)
- *     Socket.IO v2 (^2.5.1) with Engine.IO v3
+ * NATURAL IMPLEMENTATION:
+ * - Removed monkey-patch writeHead for CORS
+ * - Using Socket.IO built-in CORS configuration
+ * - Clean, maintainable code
  *
  * ============================================================================
  */
 
-var http = require('http');
-var express = require('express');
-var socketIo = require('socket.io');
-var path = require('path');
+const http = require('http');
+const express = require('express');
+const socketIo = require('socket.io');
 
-// =============================================
-// CRITICAL FIX: Monkey-patch writeHead for CORS
-// =============================================
-// This MUST run before Socket.IO is created.
-// Engine.IO v3 internally calls res.writeHead(200, {ACAO: '*', ...}) on
-// polling responses, which overwrites any headers set by Express middleware.
-//
-// By patching writeHead at the prototype level, we intercept ALL responses
-// (Express, Engine.IO, static files, everything) and ensure correct CORS
-// headers when the request has an Origin header (cross-origin request).
-//
-// This is the ONLY reliable way to fix CORS when Engine.IO overrides headers.
-
-var _originalWriteHead = http.ServerResponse.prototype.writeHead;
-http.ServerResponse.prototype.writeHead = function (statusCode, statusMessage, headers) {
-    // Normalize arguments: writeHead(statusCode, headers) or writeHead(statusCode, statusMessage, headers)
-    var resHeaders = (typeof statusMessage === 'object' && !headers) ? statusMessage : headers;
-
-    // Only fix CORS for cross-origin requests (has Origin header)
-    var origin = this.req && this.req.headers && this.req.headers.origin;
-    if (origin) {
-        // Check if Engine.IO/Socket.IO set ACAO to wildcard
-        var currentOrigin = this.getHeader('Access-Control-Allow-Origin');
-        if (currentOrigin === '*' || currentOrigin === null || currentOrigin === undefined) {
-            // Fix: echo the requesting origin (required when withCredentials:true)
-            if (resHeaders && resHeaders['Access-Control-Allow-Origin'] === '*') {
-                resHeaders['Access-Control-Allow-Origin'] = origin;
-                resHeaders['Access-Control-Allow-Credentials'] = 'true';
-            } else {
-                this.setHeader('Access-Control-Allow-Origin', origin);
-                this.setHeader('Access-Control-Allow-Credentials', 'true');
-            }
-        }
-        // Ensure credentials header is present
-        var credentials = this.getHeader('Access-Control-Allow-Credentials');
-        if (credentials !== 'true') {
-            if (resHeaders && !resHeaders['Access-Control-Allow-Credentials']) {
-                resHeaders['Access-Control-Allow-Credentials'] = 'true';
-            } else if (!resHeaders) {
-                this.setHeader('Access-Control-Allow-Credentials', 'true');
-            }
-        }
-    }
-
-    return _originalWriteHead.apply(this, arguments);
-};
-
-// =============================================
-// Load modules AFTER monkey-patch
-// =============================================
-
-var CONSTANTS = require('./config/constants');
-var { success, error, ErrorCode } = require('./utils/responseHelper');
-var logger = require('./utils/logger');
-var DB = require('./services/db');
+const CONSTANTS = require('./config/constants');
+const { success, error, ErrorCode } = require('./utils/responseHelper');
+const logger = require('./utils/logger');
+const DB = require('./services/db');
 
 // Handlers
-var { loginGame } = require('./handlers/loginGame');
-var { getServerList } = require('./handlers/getServerList');
-var { saveHistory } = require('./handlers/saveHistory');
-var { loginAnnounce } = require('./handlers/loginAnnounce');
-var { saveLanguage } = require('./handlers/saveLanguage');
-var { saveUserEnterInfo } = require('./handlers/saveUserEnterInfo');
+const { loginGame } = require('./handlers/loginGame');
+const { getServerList } = require('./handlers/getServerList');
+const { saveHistory } = require('./handlers/saveHistory');
+const { loginAnnounce } = require('./handlers/loginAnnounce');
+const { saveLanguage } = require('./handlers/saveLanguage');
+const { saveUserEnterInfo } = require('./handlers/saveUserEnterInfo');
+
+// Rate Limiter
+const RateLimiter = require('./middleware/rateLimiter');
 
 // =============================================
-// Express App
+// EXPRESS APP
 // =============================================
-var app = express();
 
-// =============================================
-// CORS Middleware — Express-level backup
-// =============================================
-// This handles non-Socket.IO routes (like /health).
-// Socket.IO routes are handled by the writeHead patch above.
+const app = express();
 
-app.use(function (req, res, next) {
-    var origin = req.headers.origin || '*';
+// CORS Middleware for non-Socket.IO routes (like /health)
+app.use((req, res, next) => {
+    const origin = req.headers.origin || '*';
     res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Login-Token, X-User-Id');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Max-Age', '86400');
 
@@ -168,62 +54,139 @@ app.use(function (req, res, next) {
     next();
 });
 
-// =============================================
-// Socket.IO — v2 Configuration
-// =============================================
-var server = http.createServer(app);
+// Health endpoint
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        service: 'login-server',
+        version: '2.0.0',
+        port: CONSTANTS.PORT,
+        host: CONSTANTS.HOST,
+        dbReady: DB.isReady(),
+        uptime: process.uptime(),
+        corsFix: 'natural-socket-io-cors',
+        timestamp: new Date().toISOString()
+    });
+});
 
-var io = socketIo(server, {
-    // Transports — polling first (matches client default order)
+// =============================================
+// HTTP SERVER + SOCKET.IO
+// =============================================
+
+const server = http.createServer(app);
+
+/**
+ * Socket.IO v2 CORS Configuration
+ * 
+ * Natural approach using built-in Socket.IO CORS handling.
+ * No monkey-patch required.
+ * 
+ * For Socket.IO v2, the cors option is available.
+ * If using older version, we set origins: '*' with handlePreflightRequest.
+ */
+const ioOptions = {
+    // Serve client library - disabled for API-only server
+    serveClient: false,
+
+    // Transports - polling first matches client default
     transports: ['polling', 'websocket'],
 
-    // CRITICAL: Disable cookie — prevents unnecessary CORS complexity
-    // Client sends withCredentials:true but we don't need cookies for game auth
+    // Disable cookies to avoid CORS complexity
     cookie: false,
 
-    // Timing — generous for private server
-    pingInterval: 25000,
-    pingTimeout: 60000,
+    // Ping/pong timing
+    pingInterval: CONSTANTS.PING_INTERVAL || 25000,
+    pingTimeout: CONSTANTS.PING_TIMEOUT || 60000,
 
-    // Upgrade
+    // Allow transport upgrades
     allowUpgrades: true,
     upgradeTimeout: 30000,
 
-    // Engine.IO preflight handler — handles OPTIONS /socket.io/?EIO=3&transport=polling
-    // NOTE: The writeHead patch above is the primary CORS fix.
-    // This handlePreflightRequest is a secondary safety net.
-    handlePreflightRequest: function (req, res) {
-        var origin = req.headers.origin || '*';
-        var headers = {
+    // CORS configuration for Socket.IO
+    // Using handlePreflightRequest for Engine.IO v3 compatibility
+    handlePreflightRequest: function(req, res) {
+        const origin = req.headers.origin || '*';
+        res.writeHead(200, {
             'Access-Control-Allow-Origin': origin,
             'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
             'Access-Control-Allow-Credentials': 'true',
-        };
-        res.writeHead(200, headers);
+        });
         res.end();
     },
 
-    // Always allow connections
-    allowRequest: function (req, callback) {
+    // Allow all connections (auth happens in handlers)
+    allowRequest: function(req, callback) {
         callback(null, true);
-    },
+    }
+};
+
+// Apply CORS via origins configuration as backup
+// Socket.IO v2 uses 'origins' option
+try {
+    // Try newer Socket.IO v3/v4 style CORS first
+    if (typeof ioOptions.cors === 'undefined') {
+        // Set origins for Socket.IO v2
+        ioOptions.origins = '*';
+    }
+} catch (e) {
+    // Ignore - we'll use handlePreflightRequest as primary
+}
+
+const io = socketIo(server, ioOptions);
+
+// =============================================
+// SOCKET.IO CONNECTION
+// =============================================
+
+io.on('connection', function(socket) {
+    const transport = socket.conn && socket.conn.transport ? socket.conn.transport.name : 'unknown';
+    logger.info('Socket', `Connected: ${socket.id} | transport=${transport}`);
+
+    // Log transport upgrades
+    if (socket.conn) {
+        socket.conn.on('upgrade', function(transport) {
+            logger.info('Socket', `Upgrade: ${socket.id} → ${transport.name}`);
+        });
+    }
+
+    // Handle incoming requests
+    socket.on('handler.process', function(payload, callback) {
+        handleProcess(socket, payload, callback);
+    });
+
+    // Handle disconnect
+    socket.on('disconnect', function(reason) {
+        logger.info('Socket', `Disconnected: ${socket.id} | reason=${reason}`);
+    });
+
+    // Handle errors
+    socket.on('error', function(err) {
+        logger.error('Socket', `Error: ${socket.id} | ${err.message}`);
+    });
 });
 
 // =============================================
-// Route handler.process → action handlers
+// REQUEST HANDLER
 // =============================================
 
+/**
+ * Route handler.process → action handlers
+ * 
+ * Client sends: { type: "User", action: "loginGame", ... }
+ * Server responds: { ret: 0, data: "JSON_STRING", compress: bool, serverTime, server0Time }
+ */
 async function handleProcess(socket, payload, callback) {
-    var action = payload.action;
-    var userId = payload.userId || payload.accountToken || '-';
-    logger.info('Request', action + ' | userId=' + userId);
+    const action = payload.action;
+    const userId = payload.userId || payload.accountToken || '-';
+    const clientIp = socket.handshake && socket.handshake.address 
+        ? socket.handshake.address 
+        : (socket.conn && socket.conn.remoteAddress);
 
-    var clientIp = socket.handshake.address || socket.conn.remoteAddress;
+    logger.info('Request', `${action} | userId=${userId} | ip=${clientIp}`);
 
     try {
         switch (action) {
-
             case 'loginGame':
                 await loginGame(socket, payload, callback, clientIp);
                 break;
@@ -249,115 +212,105 @@ async function handleProcess(socket, payload, callback) {
                 break;
 
             default:
-                logger.info('Request', 'Unknown action: ' + action + ' → success');
-                if (callback) callback(success({}));
+                logger.warn('Request', `Unknown action: ${action}`);
+                if (callback) {
+                    callback(success({}));
+                }
                 break;
         }
     } catch (err) {
-        logger.error('Request', 'Handler error (' + action + '): ' + err.message);
-        if (callback) callback(error(ErrorCode.UNKNOWN));
+        logger.error('Request', `Handler error (${action}): ${err.message}`);
+        if (callback) {
+            callback(error(ErrorCode.UNKNOWN));
+        }
     }
 }
 
 // =============================================
-// Socket.IO Connection
+// GRACEFUL SHUTDOWN
 // =============================================
-io.on('connection', function (socket) {
-    logger.info('Socket', 'Connected: ' + socket.id + ' | transports=' + (socket.conn.transport ? socket.conn.transport.name : '?'));
 
-    // Log transport upgrades
-    socket.conn.on('upgrade', function (transport) {
-        logger.info('Socket', 'Upgrade: ' + socket.id + ' → ' + transport.name);
-    });
-
-    socket.on('handler.process', function (payload, callback) {
-        handleProcess(socket, payload, callback);
-    });
-
-    socket.on('disconnect', function (reason) {
-        logger.info('Socket', 'Disconnected: ' + socket.id + ' | reason=' + reason);
-    });
-
-    socket.on('error', function (err) {
-        logger.error('Socket', 'Error: ' + socket.id + ' | ' + err.message);
-    });
-});
-
-// =============================================
-// Health endpoint
-// =============================================
-app.get('/health', function (req, res) {
-    res.json({
-        status: 'ok',
-        port: CONSTANTS.PORT,
-        dbReady: DB.isReady(),
-        uptime: process.uptime(),
-        corsFix: 'v3-writeHead-patch',
-    });
-});
-
-// =============================================
-// Start
-// =============================================
-async function start() {
-    try {
-        // Init database
-        await DB.init();
-
-        server.listen(CONSTANTS.PORT, CONSTANTS.HOST, function () {
-            console.log('');
-            console.log('  =====================================================');
-            console.log('    Super Warrior Z — Login Server (Standalone v3.0)');
-            console.log('  =====================================================');
-            console.log('    Port:           ' + CONSTANTS.PORT);
-            console.log('    Host:           ' + CONSTANTS.HOST);
-            console.log('    TEA:            OFF (verifyEnable=false)');
-            console.log('    CORS FIX:       v3 — writeHead monkey-patch');
-            console.log('    Cookie:         DISABLED');
-            console.log('    Transports:     polling, websocket');
-            console.log('    DB:             ' + CONSTANTS.DB.host + ':' + CONSTANTS.DB.port + '/' + CONSTANTS.DB.database);
-            console.log('    server0Time:    ' + CONSTANTS.SERVER_UTC_OFFSET_MS);
-            console.log('  ----------------------------------------------------');
-            console.log('    Actions:');
-            console.log('      loginGame          → Auto-register + token');
-            console.log('      GetServerList      → Server selection');
-            console.log('      SaveHistory        → Token refresh');
-            console.log('      LoginAnnounce      → Notices');
-            console.log('      SaveLanguage       → Language preference');
-            console.log('      SaveUserEnterInfo  → Analytics');
-            console.log('  =====================================================');
-            console.log('');
-        });
-
-    } catch (err) {
-        logger.error('Start', 'Failed: ' + err.message);
-        process.exit(1);
-    }
-}
-
-// =============================================
-// Graceful Shutdown
-// =============================================
 function gracefulShutdown(signal) {
-    logger.info('Shutdown', signal + ' received...');
+    logger.info('Shutdown', `${signal} received...`);
+
     io.close();
-    server.close(function () {
-        DB.close().then(function () {
+    server.close(function() {
+        DB.close().then(function() {
             logger.info('Shutdown', 'Done');
+            process.exit(0);
+        }).catch(function() {
             process.exit(0);
         });
     });
-    setTimeout(function () {
+
+    setTimeout(function() {
         logger.warn('Shutdown', 'Forced exit after timeout');
         process.exit(1);
     }, 5000);
 }
 
-process.on('SIGINT', function () { gracefulShutdown('SIGINT'); });
-process.on('SIGTERM', function () { gracefulShutdown('SIGTERM'); });
-process.on('uncaughtException', function (err) {
-    logger.error('Error', 'Uncaught: ' + err.message);
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+process.on('uncaughtException', function(err) {
+    logger.error('Error', `Uncaught: ${err.message}`);
     console.error(err.stack);
+    process.exit(1);
 });
 
+// =============================================
+// START
+// =============================================
+
+async function start() {
+    logger.info('Server', 'Starting Login Server v2.0...');
+
+    try {
+        // Initialize database
+        await DB.init();
+        logger.info('Server', 'Database initialized');
+
+        // Start HTTP server
+        server.listen(CONSTANTS.PORT, CONSTANTS.HOST, function() {
+            printBanner();
+            logger.info('Server', `Listening on ${CONSTANTS.HOST}:${CONSTANTS.PORT}`);
+        });
+
+    } catch (err) {
+        logger.error('Server', `Failed to start: ${err.message}`);
+        process.exit(1);
+    }
+}
+
+// =============================================
+// BANNER
+// =============================================
+
+function printBanner() {
+    console.log('');
+    console.log('╔══════════════════════════════════════════════════════════════╗');
+    console.log('║          Super Warrior Z — Login Server v2.0              ║');
+    console.log('╠══════════════════════════════════════════════════════════════╣');
+    console.log(`║ Port:        ${String(CONSTANTS.PORT).padEnd(41)}║`);
+    console.log(`║ Host:        ${String(CONSTANTS.HOST).padEnd(41)}║`);
+    console.log(`║ TEA:         OFF (verifyEnable=false)`.padEnd(56) + '║');
+    console.log(`║ CORS:        Natural Socket.IO configuration`.padEnd(56) + '║');
+    console.log(`║ Transports:  polling, websocket`.padEnd(56) + '║');
+    console.log(`║ DB:          ${CONSTANTS.DB.host}:${CONSTANTS.DB.port}/${CONSTANTS.DB.database}`.substring(0, 56).padEnd(56) + '║');
+    console.log(`║ server0Time: ${String(CONSTANTS.SERVER_UTC_OFFSET_MS).padEnd(41)}║`);
+    console.log('╠══════════════════════════════════════════════════════════════╣');
+    console.log('║ Actions:                                                    ║');
+    console.log('║   loginGame      → Auto-register + token'.padEnd(56) + '║');
+    console.log('║   GetServerList   → Server selection'.padEnd(56) + '║');
+    console.log('║   SaveHistory     → Token refresh + daily count'.padEnd(56) + '║');
+    console.log('║   LoginAnnounce   → Notices'.padEnd(56) + '║');
+    console.log('║   SaveLanguage    → Language preference'.padEnd(56) + '║');
+    console.log('║   SaveUserEnterInfo → Analytics'.padEnd(56) + '║');
+    console.log('╚══════════════════════════════════════════════════════════════╝');
+    console.log('');
+}
+
+// Start server
 start();
+
+module.exports = { server, io };
