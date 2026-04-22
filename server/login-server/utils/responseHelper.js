@@ -1,19 +1,33 @@
 /**
  * ============================================================================
- * Login Server — Response Helper
+ * Login Server — Response Helper  [FIXED v2.1]
  * ============================================================================
  *
- * NATURAL IMPLEMENTATION:
- * - Builds client-compatible responses
- * - Auto-compression for large data
- * - Standard error codes
+ * BUG FIXED: "compress is not a function"
  *
- * Client response format (main.min.js line 76925-76935):
- * { ret: 0, data: "JSON_STRING", compress: boolean, serverTime, server0Time }
+ *   BEFORE (broken):
+ *     function compress(str) { ... }          ← function named 'compress'
+ *     function success(dataObj, forceCompress) {
+ *       let compress = false;                 ← local var SHADOWS the function!
+ *       if (compress) {
+ *         dataStr = compress(dataStr);        ← compress is now boolean → CRASH
+ *       }
+ *     }
  *
- * Success detection: 0 === e.ret
- * Error detection: else → ErrorHandler.ShowErrorTips(e.ret)
- * Data parsing: JSON.parse(e.data), optional LZString.decompressFromUTF16
+ *   FIX: Rename the helper function to _lzCompress so it never clashes
+ *   with the local boolean variable 'compress'.
+ *
+ * Client response format (main.min.js):
+ *   { ret: 0, data: "JSON_STRING", compress: boolean, serverTime, server0Time }
+ *
+ * From HAR analysis:
+ *   - Small responses (errorCode only) → compress: false, data as plain JSON string
+ *   - Large responses (serverList, loginGame) → compress: true (optional)
+ *   - GetServerList  → data contains { serverList, history, offlineReason }
+ *   - SaveHistory    → data contains { loginToken, todayLoginCount, errorCode }
+ *   - LoginAnnounce  → data contains { data: [], errorCode: 0 }
+ *   - SaveUserEnterInfo → data contains { errorCode: 0 }
+ *   - SaveLanguage   → data contains { errorCode: 0 }
  *
  * ============================================================================
  */
@@ -22,16 +36,19 @@ const LZString = require('lz-string');
 const CONSTANTS = require('../config/constants');
 
 // =============================================
-// COMPRESS
+// COMPRESS (internal — renamed to avoid clash)
 // =============================================
 
 /**
  * Compress string to UTF16 format (client-compatible)
+ * IMPORTANT: Named _lzCompress (not 'compress') to avoid shadowing
+ * the local 'compress' boolean variable inside success().
+ *
  * @param {string} str - String to compress
  * @returns {string} Compressed string
  */
-function compress(str) {
-    return LZString.compressToUTF16(str);
+function _lzCompress(str) {
+  return LZString.compressToUTF16(str);
 }
 
 // =============================================
@@ -40,72 +57,79 @@ function compress(str) {
 
 /**
  * Build success response
- * 
- * @param {Object} dataObj - Data to return (JSON.stringify'd)
- * @param {boolean} forceCompress - Force compress (default: auto when >200 chars)
- * @returns {Object} Response object
+ *
+ * HAR-verified format:
+ *   { ret: 0, data: "{\"key\":\"val\"}", compress: false, serverTime, server0Time }
+ *
+ * @param {Object|string} dataObj - Data to return (will be JSON.stringify'd)
+ * @param {boolean} [forceCompress] - Force compress (default: auto when >500 chars)
+ * @returns {Object} Response object ready for Socket.IO callback
  */
 function success(dataObj, forceCompress) {
-    const now = Date.now();
-    let dataStr = '';
-    let compress = false;
+  const now = Date.now();
 
-    if (dataObj !== undefined && dataObj !== null) {
-        dataStr = JSON.stringify(dataObj);
-        
-        // Auto-compress when large
-        if (forceCompress === true) {
-            compress = true;
-        } else if (forceCompress === undefined && dataStr.length > 200) {
-            compress = true;
-        }
-        
-        if (compress) {
-            dataStr = compress(dataStr);
-        }
+  let dataStr = '';
+  let shouldCompress = false; // use 'shouldCompress', not 'compress', to avoid function name conflict
+
+  if (dataObj !== undefined && dataObj !== null) {
+    dataStr = (typeof dataObj === 'string') ? dataObj : JSON.stringify(dataObj);
+
+    // Determine compression
+    if (forceCompress === true) {
+      shouldCompress = true;
+    } else if (forceCompress === false) {
+      shouldCompress = false;
+    } else {
+      // Auto: only compress if > 500 chars (HAR shows small responses not compressed)
+      shouldCompress = dataStr.length > 500;
     }
 
-    return {
-        ret: 0,
-        data: dataStr,
-        compress: compress,
-        serverTime: now,
-        server0Time: CONSTANTS.SERVER_UTC_OFFSET_MS
-    };
+    if (shouldCompress) {
+      dataStr = _lzCompress(dataStr); // ← uses renamed function, safe
+    }
+  }
+
+  return {
+    ret: 0,
+    data: dataStr,
+    compress: shouldCompress,        // boolean field client checks
+    serverTime: now,
+    server0Time: CONSTANTS.SERVER_UTC_OFFSET_MS
+  };
 }
 
 /**
  * Build error response
- * 
+ *
  * @param {number} code - Error code from ErrorCode
- * @param {string} msg - Optional error message
+ * @param {string} [msg] - Optional error message
  * @returns {Object} Error response
  */
 function error(code, msg) {
-    return {
-        ret: code,
-        data: msg || '',
-        compress: false,
-        serverTime: Date.now(),
-        server0Time: CONSTANTS.SERVER_UTC_OFFSET_MS
-    };
+  return {
+    ret: code,
+    data: msg || '',
+    compress: false,
+    serverTime: Date.now(),
+    server0Time: CONSTANTS.SERVER_UTC_OFFSET_MS
+  };
 }
 
 /**
  * Build push/notify response
- * Client: if("SUCCESS" == t.ret) { ... }
- * 
+ * Client checks: if ("SUCCESS" == t.ret) { ... }
+ *
  * @param {Object} dataObj - Data to push
  * @returns {Object} Push response
  */
 function push(dataObj) {
-    return {
-        ret: 'SUCCESS',
-        data: JSON.stringify(dataObj || {}),
-        compress: false,
-        serverTime: Date.now(),
-        server0Time: CONSTANTS.SERVER_UTC_OFFSET_MS
-    };
+  return {
+    ret: 'SUCCESS',
+    data: JSON.stringify(dataObj || {}),
+    compress: false,
+    serverTime: Date.now(),
+    server0Time: CONSTANTS.SERVER_UTC_OFFSET_MS
+  };
 }
 
 // =============================================
@@ -113,26 +137,26 @@ function push(dataObj) {
 // =============================================
 
 /**
- * Error codes (from errorDefine.json)
+ * Error codes (from errorDefine.json / main.min.js)
  */
 const ErrorCode = {
-    UNKNOWN: 1,
-    STATE_ERROR: 2,
-    DATA_ERROR: 3,
-    INVALID: 4,
-    INVALID_COMMAND: 5,
-    SESSION_EXPIRED: 6,
-    LACK_PARAM: 8,
-    USER_LOGIN_BEFORE: 12,
-    USER_NOT_LOGIN_BEFORE: 13,
-    USER_NOT_LOGOUT: 14,
-    LOGIN_CHECK_FAILED: 38,
-    FORBIDDEN_LOGIN: 45,
-    NOT_ENABLE_REGIST: 47,
-    GAME_SERVER_OFFLINE: 51,
-    CLIENT_VERSION_ERR: 62,
-    MAINTAIN: 65,
-    USER_NOT_REGIST: 57003
+  UNKNOWN:               1,
+  STATE_ERROR:           2,
+  DATA_ERROR:            3,
+  INVALID:               4,
+  INVALID_COMMAND:       5,
+  SESSION_EXPIRED:       6,
+  LACK_PARAM:            8,
+  USER_LOGIN_BEFORE:     12,
+  USER_NOT_LOGIN_BEFORE: 13,
+  USER_NOT_LOGOUT:       14,
+  LOGIN_CHECK_FAILED:    38,
+  FORBIDDEN_LOGIN:       45,
+  NOT_ENABLE_REGIST:     47,
+  GAME_SERVER_OFFLINE:   51,
+  CLIENT_VERSION_ERR:    62,
+  MAINTAIN:              65,
+  USER_NOT_REGIST:       57003
 };
 
 // =============================================
@@ -140,8 +164,8 @@ const ErrorCode = {
 // =============================================
 
 module.exports = {
-    success,
-    error,
-    push,
-    ErrorCode
+  success,
+  error,
+  push,
+  ErrorCode
 };
