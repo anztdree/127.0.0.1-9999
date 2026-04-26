@@ -2008,7 +2008,6 @@ All 4 servers need:
 │
 ├── 📄 .env                             # Config: port, DB path, secret
 │
-├── 📂 database/                        # 💾 DATABASE
 │
 ├── 📂 login-server/                    # 🔓 SERVER 1 — Login (Port 8000)
 │   ├── 📄 package.json  & index.js                        # Entry point, Socket.IO, TANPA TEA
