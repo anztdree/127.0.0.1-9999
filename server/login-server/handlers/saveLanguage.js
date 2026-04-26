@@ -1,30 +1,23 @@
 /**
- * handlers/saveLanguage.js — Handler 5: Simpan Preferensi Bahasa
+ * handlers/saveLanguage.js — Simpan Language Preference
  *
- * Client call (line 114279):
- *   ts.processHandlerWithLogin(request, true, successCb, failCb)
+ * Client request fields (exact dari client code line 114279):
+ *   type: 'User'
+ *   action: 'SaveLanguage'
+ *   userid: string    — ⚠️ LOWERCASE 'userid'! (client code line 114285)
+ *   sdk, appid, language
  *
- * Client request:
- *   {
- *     type: "User",
- *     action: "SaveLanguage",
- *     userid: ts.loginUserInfo.userId,
- *     sdk: ts.loginUserInfo.sdk,
- *     appid: "",
- *     language: <language code>
- *   }
+ * Response fields:
+ *   errorCode: number — 0 = sukses
  *
- * Client callback (line 114290):
- *   0 === t.errorCode → ts.closeWindow('LanguageList') + changeLanguage(language)
- *   else → console.log('failed save language') + close anyway
- *
- * Response: { errorCode: 0 }
+ * DB columns = camelCase → WHERE userId = ?
  */
 
 function execute(data, socket, ctx) {
     var db = ctx.db;
     var buildResponse = ctx.buildResponse;
 
+    // ⚠️ LOWERCASE 'userid' — dari client, bukan typo
     var userid = (data.userid || '').trim();
     var language = (data.language || 'en').trim();
 
@@ -33,13 +26,11 @@ function execute(data, socket, ctx) {
     }
 
     return db.query(
-        'UPDATE users SET language = ? WHERE user_id = ?',
+        'UPDATE users SET language = ? WHERE userId = ?',
         [language, userid]
     ).then(function () {
-        console.log('[saveLanguage] userId=' + userid + ' lang=' + language);
         return buildResponse({ errorCode: 0 });
-    }).catch(function (err) {
-        console.error('[saveLanguage] DB error:', err.message);
+    }).catch(function () {
         return buildResponse({ errorCode: 0 });
     });
 }

@@ -1,27 +1,15 @@
 /**
- * handlers/saveUserEnterInfo.js — Handler 4: Laporkan Entry Game
+ * handlers/saveUserEnterInfo.js — Log Analitik
  *
- * Dipanggil SETELAH enterGame sukses di main-server.
- * Setelah callback, client destroy login socket (line 114459):
- *   ts.loginClient.destroy()
+ * Client request fields (exact dari client code line 114448):
+ *   type: 'User'
+ *   action: 'SaveUserEnterInfo'
+ *   accountToken, channelCode, subChannel,
+ *   createTime, userLevel, version
  *
- * Client call (line 114448):
- *   reportToLoginEnterInfo()
+ * Response: client tidak peduli (socket destroy setelah callback).
  *
- * Client request:
- *   {
- *     type: "User",
- *     action: "SaveUserEnterInfo",
- *     accountToken: ts.loginInfo.userInfo.userId,
- *     channelCode: ts.loginInfo.userInfo.channelCode,
- *     subChannel: "",
- *     createTime: UserInfoSingleton.getInstance().createTime,
- *     userLevel: UserInfoSingleton.getInstance().getUserLevel(),
- *     version: "1.0"
- *   }
- *
- * Client callback: ts.loginClient.destroy() — tidak pakai data response.
- * Response: {} kosong (data diabaikan client).
+ * DB columns = camelCase → langsung pakai.
  */
 
 function execute(data, socket, ctx) {
@@ -40,14 +28,12 @@ function execute(data, socket, ctx) {
     }
 
     return db.query(
-        'INSERT INTO user_login_logs (user_id, channel_code, sub_channel, user_level, create_time, login_time) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO userLoginLogs (userId, channelCode, subChannel, userLevel, createTime, loginTime) ' +
+        'VALUES (?, ?, ?, ?, ?, ?)',
         [accountToken, channelCode, subChannel, userLevel, createTime, now]
     ).then(function () {
-        console.log('[saveUserEnterInfo] userId=' + accountToken + ' level=' + userLevel);
         return buildResponse({});
-    }).catch(function (err) {
-        // Jangan gagal — client tetap harus destroy socket
-        console.error('[saveUserEnterInfo] DB error:', err.message);
+    }).catch(function () {
         return buildResponse({});
     });
 }

@@ -1,12 +1,14 @@
 /**
- * handlers/loginAnnounce.js — Login Announcement/Notice
+ * handlers/loginAnnounce.js — Login Announcements / Bulletin
  *
- * Dipanggil setelah loginGame sukses (line 138128 getNotice).
- * Response: { data: [] } — array kosong = tidak ada notice.
+ * Verified dari original minified main.min.js.
+ *
+ * Response: { data: [] } — kosong, tidak ada announcement.
  */
 
 function execute(data, socket, ctx) {
     var buildResponse = ctx.buildResponse;
+
     return Promise.resolve(buildResponse({ data: [] }));
 }
 

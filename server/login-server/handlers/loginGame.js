@@ -1,39 +1,23 @@
 /**
- * handlers/loginGame.js — Handler 1: Autentikasi User
+ * handlers/loginGame.js — Register + Login
  *
- * Register + Login jadi SATU (Origin/Manual path).
- * Jika user belum ada → INSERT baru.
- * Jika user sudah ada → UPDATE last_login.
+ * Client request fields (exact dari client code line 114369):
+ *   type: 'User'
+ *   action: 'loginGame'
+ *   userId, password, fromChannel, channelName, headImageUrl,
+ *   nickName, subChannel, version
  *
- * Client call (line 114369):
- *   ts.clientLoginUser(username, password, password, callback)
- *   → fromChannel = parameter ke-3 = password
+ * Response fields yang client baca:
+ *   userId, channelCode, loginToken, nickName,
+ *   securityCode, createTime, language
  *
- * Client request:
- *   {
- *     type: "User",
- *     action: "loginGame",
- *     userId: <username>,
- *     password: "game_origin",     // default jika kosong (line 137980)
- *     fromChannel: "game_origin",   // = password (line 137981)
- *     channelName: "",
- *     headImageUrl: "",
- *     nickName: "",
- *     subChannel: "",
- *     version: "1.0"
- *   }
- *
- * Client response (line 138020-138023):
- *   ts.loginInfo.userInfo = {
- *     userId, channelCode, loginToken, nickName, securityCode, createTime
- *   }
- *   + line 113906: if (a.language) ts.language = a.language
+ * DB columns = camelCase → langsung pakai, tidak ada mapping.
  */
 
 var crypto = require('crypto');
 
-function generateToken() {
-    return crypto.randomBytes(32).toString('hex');
+function randomHex(bytes) {
+    return crypto.randomBytes(bytes).toString('hex');
 }
 
 function execute(data, socket, ctx) {
@@ -45,54 +29,53 @@ function execute(data, socket, ctx) {
     var password = (data.password || '').trim();
     var fromChannel = (data.fromChannel || password || '').trim();
 
-    // Default password: "game_origin" jika kosong (line 137980)
-    if (!password) {
-        password = 'game_origin';
-    }
+    // Default password (client code line 137980)
+    if (!password) password = 'game_origin';
+    if (!fromChannel) fromChannel = password;
 
     if (!userId) {
         return Promise.resolve(buildErrorResponse(2));
     }
 
     var now = Date.now();
+    var loginToken = randomHex(32);    // 64 hex chars — TOKEN SEMENTARA
+    var securityCode = randomHex(16);  // 32 hex chars
 
-    // Check apakah user sudah ada
     return db.queryOne(
-        'SELECT user_id, password, nick_name, create_time, channel_code, language, security_code FROM users WHERE user_id = ?',
+        'SELECT userId, password, nickName, createTime, channelCode, language ' +
+        'FROM users WHERE userId = ?',
         [userId]
     ).then(function (existingUser) {
-        var loginToken = generateToken();
-        var securityCode = crypto.randomBytes(16).toString('hex');
-
         if (existingUser) {
-            // === LOGIN USER YANG SUDAH ADA — CEK PASSWORD ===
+            // User sudah ada → cek password (PLAINTEXT)
             if (existingUser.password !== password) {
-                console.warn('[loginGame] Wrong password: ' + userId);
-                return Promise.resolve(buildErrorResponse(3)); // ret=3 → password salah
+                return Promise.resolve(buildErrorResponse(3));
             }
 
+            // Update token dan security code
             return db.query(
-                'UPDATE users SET last_login_time = ?, login_token = ?, security_code = ?, channel_code = ? WHERE user_id = ?',
+                'UPDATE users SET lastLoginTime = ?, loginToken = ?, securityCode = ?, channelCode = ? ' +
+                'WHERE userId = ?',
                 [now, loginToken, securityCode, fromChannel, userId]
             ).then(function () {
-                console.log('[loginGame] Login: ' + userId);
                 return buildResponse({
-                    userId: userId,
+                    userId: existingUser.userId,
                     channelCode: fromChannel,
                     loginToken: loginToken,
-                    nickName: existingUser.nick_name || userId,
+                    nickName: existingUser.nickName || existingUser.userId,
                     securityCode: securityCode,
-                    createTime: existingUser.create_time,
+                    createTime: existingUser.createTime,
                     language: existingUser.language || 'en'
                 });
             });
+
         } else {
-            // === REGISTER USER BARU ===
+            // Auto-register
             return db.query(
-                'INSERT INTO users (user_id, password, channel_code, nick_name, security_code, create_time, last_login_time, login_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                'INSERT INTO users (userId, password, channelCode, nickName, securityCode, createTime, lastLoginTime, loginToken) ' +
+                'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                 [userId, password, fromChannel, userId, securityCode, now, now, loginToken]
             ).then(function () {
-                console.log('[loginGame] Register: ' + userId);
                 return buildResponse({
                     userId: userId,
                     channelCode: fromChannel,
