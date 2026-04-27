@@ -952,10 +952,13 @@ function createNewUser(db, userId, pwd) {
     // Update optional fields to null (not empty objects)
     // _superSkillLevel is already 0 in DB default
     // _qigong, _qigongTmp, _totalCost, _breakInfo → null
-    db.dbRun('UPDATE heroes SET qigong = ? WHERE heroId = ?', ['null', heroId]);
-    db.dbRun('UPDATE heroes SET qigongTmp = ? WHERE heroId = ?', ['null', heroId]);
-    db.dbRun('UPDATE heroes SET totalCost = ? WHERE heroId = ?', ['null', heroId]);
-    db.dbRun('UPDATE heroes SET breakInfo = ? WHERE heroId = ?', ['null', heroId]);
+    db.dbRun('UPDATE heroes SET qigong = NULL WHERE heroId = ?', [heroId]);
+    db.dbRun('UPDATE heroes SET qigongTmp = NULL WHERE heroId = ?', [heroId]);
+    db.dbRun('UPDATE heroes SET totalCost = NULL WHERE heroId = ?', [heroId]);
+    db.dbRun('UPDATE heroes SET breakInfo = NULL WHERE heroId = ?', [heroId]);
+
+    // Ensure superSkillLevel = 0 (NUMBER, not object!)
+    db.dbRun('UPDATE heroes SET superSkillLevel = ? WHERE heroId = ?', ['0', heroId]);
 
     // ================================================================
     // 3. CREATE STARTING ITEMS
