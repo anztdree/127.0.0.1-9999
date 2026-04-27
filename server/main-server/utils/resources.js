@@ -61,6 +61,9 @@ function findResourceDir() {
         path.resolve(__dirname, '..', '..', 'resource', 'json'),
         // Alternative: inside server directory
         path.resolve(__dirname, '..', '..', 'server', 'resource', 'json'),
+        // Common web server deployments
+        path.resolve(__dirname, '..', '..', '..', 'resource', 'json'),
+        path.resolve('/var/www/html/resource/json'),
     ];
 
     for (var i = 0; i < candidates.length; i++) {
