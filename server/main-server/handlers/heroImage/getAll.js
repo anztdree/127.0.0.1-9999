@@ -13,34 +13,39 @@ var db = require('../../db');
 module.exports = {
     execute: function (data, socket, ctx) {
         return new Promise(function (resolve) {
-            var userId = data.userId;
-            if (!userId) return resolve(ctx.buildErrorResponse(1));
+            try {
+                var userId = data.userId;
+                if (!userId) return resolve(ctx.buildErrorResponse(1));
 
-            var heroes = db.getHeroes(userId);
-            var herosMap = {};
+                var heroes = db.getHeroes(userId);
+                var herosMap = {};
 
-            for (var i = 0; i < heroes.length; i++) {
-                var h = heroes[i];
-                var displayId = String(h.heroDisplayId);
-                var level = parseInt(h.heroBaseAttr) ? 0 : 0;
+                for (var i = 0; i < heroes.length; i++) {
+                    var h = heroes[i];
+                    var displayId = String(h.heroDisplayId);
+                    var level = 0;
 
-                // Parse heroBaseAttr to get level
-                try {
-                    var attr = JSON.parse(h.heroBaseAttr || '{}');
-                    level = attr._level || 0;
-                } catch (e) { level = 0; }
+                    // Parse heroBaseAttr to get level
+                    try {
+                        var attr = JSON.parse(h.heroBaseAttr || '{}');
+                        level = attr._level || 0;
+                    } catch (e) { level = 0; }
 
-                // Track max level per displayId
-                if (!herosMap[displayId] || level > herosMap[displayId]._maxLevel) {
-                    herosMap[displayId] = {
-                        _id: displayId,
-                        _maxLevel: level,
-                        _selfComments: []
-                    };
+                    // Track max level per displayId
+                    if (!herosMap[displayId] || level > herosMap[displayId]._maxLevel) {
+                        herosMap[displayId] = {
+                            _id: displayId,
+                            _maxLevel: level,
+                            _selfComments: []
+                        };
+                    }
                 }
-            }
 
-            resolve(ctx.buildResponse({ _heros: herosMap }));
+                resolve(ctx.buildResponse({ _heros: herosMap }));
+            } catch (err) {
+                console.error('[heroImage/getAll] Error:', err);
+                resolve(ctx.buildErrorResponse(1));
+            }
         });
     }
 };
