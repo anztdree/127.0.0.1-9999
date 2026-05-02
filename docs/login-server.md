@@ -86,8 +86,7 @@ Setiap response dari Login-Server:
     data: string,         // WAJIB — JSON string (raw atau LZString compressed)
     compress: boolean,    // WAJIB — true jika data LZString compressed
     serverTime: number,   // WAJIB — Date.now() timestamp server
-    server0Time: number   // WAJIB — new Date().getTimezoneOffset() * 60 * 1000
-}
+    server0Time: number   // WAJIB — 25200000 
 ```
 
 **`serverTime` dan `server0Time` WAJIB di setiap response** — success maupun error. Tanpa ini client tidak bisa sinkronisasi waktu, daily reset, event schedule — semua kacau.
