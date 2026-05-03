@@ -4,7 +4,8 @@
 > Source: `main.min(unminfy).js` (244,761 lines) + `index.html` + `sdk.js`
 > Tools: Node.js | Database: better-sqlite3 ^11.7.0
 > Metode: Tanpa STUB, OVERRIDE, FORCE, BYPASS, DUMMY, ASUMSI
-> Versi: 4.0 — Decisions locked: Security Code Sharing (Option A), Payment Notify (Option B), Log Style (Emoji Block)
+> Versi: 6.0 — Decisions locked: Security Code Sharing (Option A), Payment Notify (Option B), Log Style (Emoji Block), CORS: Allow-Origin:*
+> Changelog v6.0: FIX server0Time=25200000, ADD POST /event/report (console log), ADD CORS spec (game:8080 ↔ SDK:9999), DECIDE loginGame SKIP (SDK focus), DECIDE localStorage key=ppgame_login, DECIDE Eruda no-inject (rely on index.html), MARK Error 38 REQUIRES DEEPER ANALYSIS, SKIP LoginAnnounce/LZString (not SDK scope), CONFIRM /api/payment/callback FINAL
 
 ---
 
@@ -22,13 +23,17 @@
 10. [TEA Verification Handshake](#10-tea-verification-handshake)
 11. [Server Connection Architecture](#11-server-connection-architecture)
 12. [Window Variables — Konfigurasi Runtime](#12-window-variables--konfigurasi-runtime)
-13. [SDK-Server Spesifikasi — Standalone](#13-sdk-server-spesifikasi--standalone)
-14. [sdk.js — Spesifikasi Implementasi](#14-sdkjs--spesifikasi-implementasi)
-15. [Database Schema — SDK-Server Standalone](#15-database-schema--sdk-server-standalone)
-16. [Login UI — Guest & UserID Login](#16-login-ui--guest--userid-login)
-17. [Error Codes Relevan](#17-error-codes-relevan)
-18. [Catatan Implementasi](#18-catatan-implementasi)
-19. [Log Style — SDK-SERVER & SDK.JS](#19-log-style--sdk-server--sdkjs)
+13. [SDK Channel UI Visibility — Logika per-Channel](#13-sdk-channel-ui-visibility--logika-per-channel)
+14. [Third-Party Analytics — FB/Yahoo/Google](#14-third-party-analytics--fbyahoogoogle)
+15. [SDK-Server Spesifikasi — Standalone](#15-sdk-server-spesifikasi--standalone)
+16. [sdk.js — Spesifikasi Implementasi](#16-sdkjs--spesifikasi-implementasi)
+17. [Database Schema — SDK-Server Standalone](#17-database-schema--sdk-server-standalone)
+18. [Login UI — Guest & UserID Login](#18-login-ui--guest--userid-login)
+19. [Error Codes Relevan](#19-error-codes-relevan)
+    - [19.1 Error 38 — REQUIRES DEEPER ANALYSIS](#191-error-38--requires-deeper-analysis)
+20. [Catatan Implementasi](#20-catatan-implementasi)
+    - [20.10 Decisions — SKIP/FINAL (v6.0)](#2010-decisions--skipfinal-v60)
+21. [Log Style — SDK-SERVER & SDK.JS](#21-log-style--sdk-server--sdkjs)
 
 ---
 
@@ -864,7 +869,7 @@ Client                              Server
     data: string,         // JSON string (raw atau LZString compressed)
     compress: boolean,    // true = LZString compressed
     serverTime: number,   // WAJIB: Date.now()
-    server0Time: number   // WAJIB: new Date().getTimezoneOffset() * 60 * 1000
+    server0Time: number   // WAJIB: 25200000 (fixed value — UTC+7 offset dalam ms)
 }
 ```
 
@@ -922,33 +927,352 @@ window["debugLanguage"] = "en";
 
 | Variable | Type | Default PPGAME | Penggunaan | Line |
 |----------|------|---------------|-----------|------|
-| `window.sdkChannel` | `string` | `'ppgame'` | Analytics routing | 114178 |
-| `window.sdkNativeChannel` | `string` | `undefined` | UI button visibility | 114155 |
-| `window.issdkVer2` | `boolean` | `false` | Report format v2 | 83257 |
+| `window.sdkChannel` | `string` | `'ppgame'` | Analytics routing, channel identification | 114178 |
+| `window.sdkNativeChannel` | `string` | `undefined` | UI button visibility per channel | 114155 |
+| `window.issdkVer2` | `boolean` | `false` | Report format v2 (hanya EnterGame) | 83257 |
 | `window.serverList` | `object` | `undefined` | Server whitelist filter | 138062 |
-| `window.gameIcon` | `string` | `''` | Login background | 137845 |
-| `window.supportLang` | `array` | `undefined` | Language selector | 137851 |
+| `window.gameIcon` | `string` | `''` | Login background image selection | 137845 |
+| `window.supportLang` | `array` | `undefined` | Language selector visibility & list | 137851 |
 | `window.hideShop` | `boolean` | `false` | Hide shop button | 233461 |
-| `window.show18Login` | `boolean` | `false` | 18+ on login | 137840 |
-| `window.show18Home` | `boolean` | `false` | 18+ on home | 233476 |
-| `window.contactSdk` | `function` | `undefined` | Customer service | 114158 |
-| `window.showContact` | `boolean` | `false` | Contact button | 114158 |
-| `window.userCenterSdk` | `function` | `undefined` | User center | 114162 |
-| `window.switchAccountSdk` | `function` | `undefined` | Switch account | 114164 |
+| `window.show18Login` | `boolean` | `false` | 18+ badge on login screen | 137840 |
+| `window.show18Home` | `boolean` | `false` | 18+ badge on home screen | 233476 |
+| `window.showSixteenImg` | `boolean` | `false` | 16+ image on login | 137850 |
+| `window.contactSdk` | `function` | `undefined` | Customer service callback | 114158 |
+| `window.showContact` | `boolean` | `false` | Contact button visibility | 114158 |
+| `window.userCenterSdk` | `function` | `undefined` | User center callback | 114162 |
+| `window.switchAccountSdk` | `function` | `undefined` | Switch account (tanwan55en) | 114164 |
+| `window.fbGiveLiveSdk` | `function` | `undefined` | Facebook Live Like (tanwan55en) | 231750 |
+| `window.reportToFbq` | `function` | `undefined` | BSH5 Facebook pixel reporting | 114181 |
+| `window.reportToBSH5Createrole` | `function` | `undefined` | BSH5 role creation reporting | 114176 |
 | `window.getQueryStringByName` | `function` | defined in HTML | URL params | 42 |
+| `window.loginpictype` | `number` | `undefined` | -2 = custom login pic, else default | 137840 |
+| `window.loginpic` | `string` | `undefined` | URL login background (when loginpictype=-2) | 137841 |
+| `window.privacyUrl` | `string` | `undefined` | Privacy policy link (shown for Huawei) | 137870 |
+| `window.debugUrl` | `string` | `undefined` | Custom resource base URL for debug | 83183 |
+| `window.clientver` | `string` | `undefined` | Client version override | 83711 |
+| `window.clientserver` | `string` | `undefined` | Resource server URL (WeChat) | 83716 |
+| `window.versionConfig` | `string` | `undefined` | Version config override | 87129 |
+| `window.showCurChannel` | `string` | `undefined` | Facebook button channel config | 114160 |
+| `window.battleAudio` | `boolean` | `undefined` | Force battle audio on | 97663 |
+
+### 12.3 Variabel Internal yang Di-set oleh Game Code (READ-ONLY untuk SDK)
+
+Variabel-variabel ini di-set oleh game code (main.min.js) sebagai response dari server atau sebagai state internal. SDK TIDAK perlu meng-set variabel ini, tapi perlu tahu bahwa mereka ada:
+
+| Variable | Type | Penggunaan | Line |
+|----------|------|-----------|------|
+| `window.battleAudio` | `boolean` | Override battle audio setting | 97663 |
+| `window.dotq` | `array` | Yahoo tracking queue (sdkChannel='en') | 114184 |
+| `window.maskLayerClear` | `function` | Clear loading mask | 86854 |
+| `window.loadJsonFunc` | `function` | Load JSON from preloaded window vars | index.html:125 |
+| `window.refreshPage` | `function` | Reload page | index.html:129 |
+
+### 12.4 isNoSdk Flag — Penentu Alur Login
+
+```javascript
+// Line 137871
+UserInfoSingleton.getInstance().isNoSdk = 'game_origin' == o.sdk;
+```
+
+**Penjelasan:**
+- Jika `sdk === 'game_origin'` → `isNoSdk = true` → game berperilaku tanpa SDK
+- Jika `sdk !== 'game_origin'` (termasuk `'ppgame'`) → `isNoSdk = false` → game berperilaku dengan SDK
+- **PPGAME: `sdk = 'ppgame'` → `isNoSdk = false`** — ini yang kita inginkan, game menggunakan SDK login path
+
+Flag ini mempengaruhi:
+- `isFromSdk` property di Login class → `true` ketika SDK login berhasil
+- Tombol logout: `logoutBtnTap` → `isFromSdk ? refreshServerList() : showDefaultLoginStatus()`
+- ThinkingData activation: `checkUseThinkingData(sdk)` → hanya aktif untuk `'Blackstone'`
+
+### 12.5 saveLanguage — Request ke Login-Server
+
+```javascript
+// Line 114279-114296
+saveLanguage: function(lang) {
+    var t = TSBrowser.executeFunction('getAppId') || '';
+    var n = TSBrowser.executeFunction('getSdkLoginInfo');
+    var o = ts.loginUserInfo.userId;
+    var a = ts.loginUserInfo.sdk;
+    
+    // Fallback jika loginUserInfo belum populated
+    if (!o && n) { o = n.userId; a = n.sdk; }
+    
+    var r = {
+        type: 'User',
+        action: 'SaveLanguage',
+        userid: ts.loginUserInfo.userId,   // ← PERHATIAN: huruf kecil 'userid'!
+        sdk: ts.loginUserInfo.sdk,
+        appid: t,
+        language: lang
+    };
+    ts.processHandlerWithLogin(r, true, successCallback, errorCallback);
+}
+```
+
+**PERHATIAN:** Field `userid` menggunakan huruf kecil, berbeda dengan `GetServerList` yang pakai `userId` (CamelCase). Ini quirk dari game client yang HARUS dihandle Login-Server.
+
+### 12.6 clientLoginUser — Origin Login (Fallback tanpa SDK)
+
+```javascript
+// Line 114369-114385
+clientLoginUser: function(username, password, fromChannel, callback) {
+    var subChannel = TSBrowser.executeFunction('getAppId') || '';
+    var requestData = {
+        type: 'User',
+        action: 'loginGame',
+        userId: username,
+        password: password,
+        fromChannel: fromChannel,
+        channelName: '',
+        headImageUrl: '',
+        nickName: '',
+        subChannel: subChannel,
+        version: '1.0'
+    };
+    ts.processHandlerWithLogin(requestData, false, callback);
+}
+```
+
+**Alur Origin Login** (Line 137977-137990):
+```
+1. checkLastLogin() → baca dari localStorage
+2. doOriginLoginRequest(credentials)
+3. credentials.password = 'game_origin' (default jika tidak ada password)
+4. clientLoginUser(username, password, password, callback)
+5. callback → clientRequestServerList → selectServer
+```
+
+**Untuk PPGAME:** Alur ini TIDAK pernah dijalankan karena `checkSDK()` return `true`. Login-Server tetap perlu implement `loginGame` action untuk backward compatibility, tapi **untuk Phase 1 SDK fokus, loginGame SKIP dulu** — akan diimplement di Phase 2 (Login-Server).
 
 ---
 
-## 13. SDK-SERVER SPESIFIKASI — STANDALONE
+## 13. SDK CHANNEL UI VISIBILITY — LOGIKA PER-CHANNEL
 
-### 13.1 Port & Transport
+### 13.1 UI Button Visibility Functions
+
+Game client memiliki 6 function yang menentukan visibility tombol SDK di UI Settings dan Login. Semua bergantung pada `window.sdkNativeChannel` dan/atau `window.sdkChannel`. Untuk PPGAME (`sdkNativeChannel = undefined`), sebagian besar tombol HIDDEN.
+
+```javascript
+// Line 114155-114166
+```
+
+| Function | Logic | PPGAME Result | Catatan |
+|----------|-------|--------------|---------|
+| `getSDKCDKEYBtnShow()` | `window.sdkNativeChannel ? true : true` | **`true`** | Selalu true! Logic bug — kedua branch return true |
+| `getSDKContactBtnShow()` | `window.contactSdk ? (window.showContact ? true : sdkNativeChannel in ['tanwan55en','kr']) : false` | **`false`** | contactSdk undefined → false |
+| `getSDKtoFacebookBtnShow()` | `window.showCurChannel ? complex logic : false` | **`false`** | showCurChannel undefined → false |
+| `getSDKuserCenterBtnShow()` | `window.userCenterSdk && sdkNativeChannel === 'tanwan55en'` | **`false`** | userCenterSdk undefined → false |
+| `getSDKSwitchAccount()` | `window.switchAccountSdk && sdkNativeChannel === 'tanwan55en'` | **`false`** | switchAccountSdk undefined → false |
+| `getSDKLoginSwitchAccount()` | `window.switchUser && sdkNativeChannel in ['kr','vi']` | **`false`** | sdkNativeChannel undefined → false |
+
+### 13.2 Implikasi untuk sdk.js PPGAME
+
+Untuk PPGAME, kita TIDAK perlu mengimplementasi:
+- `window.contactSdk` — tombol hidden
+- `window.userCenterSdk` — tombol hidden
+- `window.switchAccountSdk` — tombol hidden
+- `window.fbGiveLiveSdk` — hanya tanwan55en
+- `window.showContact` — tidak perlu
+- `window.showCurChannel` — tidak perlu
+
+Yang perlu diimplementasi minimal:
+- `window.switchUser` — dipakai di `getSDKLoginSwitchAccount()` dan di Login screen (Line 191790-191798), tapi untuk PPGAME bisa diabaikan karena `sdkNativeChannel` undefined → tombol hidden
+- `window.contactSdk` — dipanggil langsung di Line 138117 tanpa visibility check, tapi TIDAK error jika undefined (hanya if-check)
+
+### 13.3 checkMoyaSdk — Korean/Taiwan Logic
+
+```javascript
+// Line 114202
+checkMoyaSdk: function() {
+    return ('kr' == window.sdkNativeChannel || 'kr' == window.sdkChannel) 
+           && 'tw' == ToolCommon.getLanguage() 
+           ? true : false;
+}
+```
+
+**PPGAME:** `sdkChannel = 'ppgame'` ≠ `'kr'` → `checkMoyaSdk() = false` → TIDAK ada Moya SDK behavior.
+
+### 13.4 Login Screen — sdkChannel Logic
+
+```javascript
+// Line 191676
+if ('jr' == window.sdkChannel) {
+    e.switchAccountBtn.parent.visible = false;
+    e.switchAccountBtn.parent.includeInLayout = false;
+}
+```
+
+**PPGAME:** `sdkChannel = 'ppgame'` ≠ `'jr'` → switch account button tetap visible (tapi hidden oleh `getSDKLoginSwitchAccount()` yang return false).
+
+### 13.5 Home Scene — goHome Channel Logic
+
+```javascript
+// Line 236669-236670
+if (window && window.sdkChannel && 'sylz' != window.sdkChannel && '' != window.sdkChannel) {
+    var o = 'leida_' + window.sdkChannel;
+    n.push(o);
+}
+```
+
+**PPGAME:** `sdkChannel = 'ppgame'` ≠ `'sylz'` ≠ `''` → push `'leida_ppgame'` ke array. Ini untuk resource group selection — game mencoba load resource group `leida_ppgame`. Jika group tidak ada, fallback ke default. **Tidak perlu action khusus.**
+
+---
+
+## 14. THIRD-PARTY ANALYTICS — FB/YAHOO/GOOGLE
+
+### 14.1 Overview
+
+Game client terintegrasi dengan beberapa third-party analytics service. Semua hanya aktif untuk channel tertentu (`sdkChannel === 'en'`). Untuk PPGAME, semua ini **TIDAK AKTIF**.
+
+### 14.2 Facebook Pixel — `reportToEnFaceBookSdk`
+
+```javascript
+// Line 114177-114179
+reportToEnFaceBookSdk: function(e) {
+    var t = TSBrowser.getVariantValue('sdkChannel');
+    'en' == t && TSBrowser.executeFunction('fbq', e.actionName, e.eventName);
+}
+```
+
+**PPGAME:** `sdkChannel = 'ppgame'` ≠ `'en'` → **TIDAK AKTIF**
+
+### 14.3 BSH5 Facebook Pixel — `reportToBsH5FaceBookSdk`
+
+```javascript
+// Line 114180-114181
+reportToBsH5FaceBookSdk: function(e) {
+    window && window.reportToFbq && window.reportToFbq(e);
+}
+```
+
+**PPGAME:** `window.reportToFbq` undefined → **TIDAK AKTIF**
+
+### 14.4 Yahoo Analytics — `reportToEnYaHooSdk`
+
+```javascript
+// Line 114182-114196
+reportToEnYaHooSdk: function(e) {
+    var t = TSBrowser.getVariantValue('sdkChannel');
+    'en' == t && window.dotq && (window.dotq = window.dotq || [], window.dotq.push({
+        projectId: '10000',
+        properties: {
+            pixelId: '1000XXXX',
+            qstrings: { et: 'custom', ea: e }
+        }
+    }));
+}
+```
+
+**PPGAME:** `sdkChannel = 'ppgame'` ≠ `'en'` → **TIDAK AKTIF**
+
+### 14.5 Google Analytics — `reportToEnGoogleSdk`
+
+```javascript
+// Line 114195-114197
+reportToEnGoogleSdk: function(e) {
+    var t = TSBrowser.getVariantValue('sdkChannel');
+    'en' == t && TSBrowser.executeFunction('gtag', 'event', 'conversion', { send_to: e });
+}
+```
+
+**Conversion ID contoh:** `'AW-727890639/fHr2CNfov6UBEM_1itsC'` (Line 114531)
+
+**PPGAME:** `sdkChannel = 'ppgame'` ≠ `'en'` → **TIDAK AKTIF**
+
+### 14.6 350 Platform — `reportTo350CreateRole` / `report2Sdk350LoginUser`
+
+```javascript
+// Line 114198-114201
+reportTo350CreateRole: function(e) {
+    TSBrowser.executeFunction('report2Sdk350CreateRole', e);
+},
+report2Sdk350LoginUser: function(e) {
+    TSBrowser.executeFunction('report2Sdk350LoginUser', e);
+}
+```
+
+**PPGAME:** `window.report2Sdk350CreateRole` dan `window.report2Sdk350LoginUser` undefined → TSBrowser.executeFunction return `undefined` → **TIDAK AKTIF**
+
+### 14.7 ThinkingData — Analytics Platform
+
+```javascript
+// Line 88938
+var ThinkingdataAppId = 'da5e91639fc948399ba6c9523f593944';
+var ThinkingdataServerUrl = 'https://ssweb.episodezz.com';
+
+// Line 88956-88957
+ThinkingdataSingleton.checkUseThinkingData = function(e) {
+    this.useThinkingData = 'Blackstone' == e;
+};
+```
+
+**PPGAME:** `sdk = 'ppgame'` ≠ `'Blackstone'` → `useThinkingData = false` → **TIDAK AKTIF**
+
+### 14.8 ReportToCpapiCreaterole — CP API (gameId: 261)
+
+```javascript
+// Line 83327-83335
+ReportToCpapiCreaterole: function() {
+    var e = {
+        gameId: 261,
+        userId: ts.loginUserInfo.userId,
+        areaId: UserInfoSingleton.getInstance().getServerId(),
+        roleName: UserInfoSingleton.getInstance().userNickName,
+        sign: ts.loginUserInfo.sign
+    };
+    ts.reportToCpapiCreaterole(e);  // → window.reportToCpapiCreaterole(e)
+}
+```
+
+**PPGAME:** `window.reportToCpapiCreaterole` undefined → TSBrowser.executeFunction return `undefined` → **TIDAK AKTIF.** Namun data tetap disiapkan oleh game. Jika kita ingin capture data ini, kita bisa implement `window.reportToCpapiCreaterole` di sdk.js.
+
+### 14.9 ReportToBSH5Createrole — BSH5 Role Creation
+
+```javascript
+// Line 83336-83347
+ReportToBSH5Createrole: function() {
+    var e = {
+        uid: ts.loginUserInfo.userId,
+        serverName: ts.loginUserInfo.serverName,
+        userRoleName: UserInfoSingleton.getInstance().userNickName,
+        userRoleId: UserInfoSingleton.getInstance().userId,
+        userRoleLevel: UserInfoSingleton.getInstance().getUserLevel(),
+        vipLevel: UserInfoSingleton.getInstance().userVipLevel,
+        partyName: '',
+        userRoleBalance: '',
+        serverId: ts.loginUserInfo.serverId
+    };
+    window.reportToBSH5Createrole && window.reportToBSH5Createrole(e);
+}
+```
+
+**PPGAME:** `window.reportToBSH5Createrole` undefined → if-check fails → **TIDAK AKTIF**
+
+### 14.10 Summary — Third-Party Analytics untuk PPGAME
+
+| Service | Channel Required | PPGAME Status | Action Needed |
+|---------|-----------------|---------------|---------------|
+| Facebook Pixel (en) | `sdkChannel === 'en'` | ❌ Tidak Aktif | Tidak perlu |
+| BSH5 Facebook | `window.reportToFbq` | ❌ Tidak Aktif | Tidak perlu |
+| Yahoo Analytics | `sdkChannel === 'en'` | ❌ Tidak Aktif | Tidak perlu |
+| Google Analytics | `sdkChannel === 'en'` | ❌ Tidak Aktif | Tidak perlu |
+| 350 Platform | `window.report2Sdk350*` | ❌ Tidak Aktif | Tidak perlu |
+| ThinkingData | `sdk === 'Blackstone'` | ❌ Tidak Aktif | Tidak perlu |
+| CP API (gameId:261) | `window.reportToCpapiCreaterole` | ❌ Tidak Aktif | Opsional — bisa implement jika ingin tracking |
+| BSH5 Role | `window.reportToBSH5Createrole` | ❌ Tidak Aktif | Opsional — bisa implement jika ingin tracking |
+
+---
+
+## 15. SDK-SERVER SPESIFIKASI — STANDALONE
+
+### 15.1 Port & Transport
 
 ```
 SDK-SERVER: Port 9999 (HTTP REST API — Express.js atau native http)
 Database: better-sqlite3 ^11.7.0 — file: ./data/sdk.db
 ```
 
-### 13.2 Endpoints
+### 15.2 Endpoints
 
 | Method | Path | Deskripsi | Request Body | Response |
 |--------|------|-----------|-------------|----------|
@@ -960,8 +1284,9 @@ Database: better-sqlite3 ^11.7.0 — file: ./data/sdk.db
 | GET | `/payment/status/:paymentId` | Cek status payment | — | `{status, orderId}` |
 | GET | `/payment/list/:userId` | Riwayat payment | — | `[{paymentId, ...}]` |
 | GET | `/user/info/:userId` | Info user | — | `{userId, nickName, ...}` |
+| POST | `/event/report` | Report event dari sdk.js | `{eventType, data}` | `{success: true}` — **HANYA log ke console, tidak kirim ke external** |
 
-### 13.3 Standalone Dependency
+### 15.3 Standalone Dependency
 
 ```json
 {
@@ -972,12 +1297,57 @@ Database: better-sqlite3 ^11.7.0 — file: ./data/sdk.db
     "dependencies": {
         "express": "^4.18.0",
         "better-sqlite3": "^11.7.0",
-        "md5": "^2.3.0"
+        "md5": "^2.3.0",
+        "cors": "^2.8.5"
     }
 }
 ```
 
-### 13.4 Auth Response Format
+### 15.4 CORS Configuration
+
+**DECIDED:** SDK-Server menggunakan `cors` middleware dengan `Access-Control-Allow-Origin: *`.
+
+**Alasan:**
+- Game berjalan di `http://127.0.0.1:8080` (static file server)
+- SDK-Server berjalan di `http://127.0.0.1:9999`
+- Browser akan memblokir cross-origin request dari port 8080 ke 9999 tanpa CORS header
+- Karena semua server berjalan di localhost, security risk minimal
+- `cors: *` adalah pilihan paling sederhana dan reliable
+
+```javascript
+// SDK-Server (index.js):
+const cors = require('cors');
+app.use(cors({ origin: '*' }));  // Allow all origins — localhost only
+```
+
+**Alternatif yang DIPERTIMBANGKAN:**
+- Proxy di game server → lebih kompleks, tidak perlu
+- Specific origin `http://127.0.0.1:8080` → terlalu rigid, tidak ada keuntungan di localhost
+
+### 15.5 Event Reporting — /event/report
+
+**DECIDED:** Endpoint `POST /event/report` aktif dan menerima data, tapi HANYA log ke console server. Tidak ada kirim ke external service.
+
+```javascript
+// SDK-Server handler:
+app.post('/event/report', (req, res) => {
+    const { eventType, data } = req.body;
+    console.log(`📊 EVENT ▸ ${eventType}`, data);
+    // Hanya log — tidak kirim ke mana-mana
+    res.json({ success: true });
+});
+```
+
+**sdk.js memanggil endpoint ini ketika:**
+- `PPGAME.playerEnterServer(data)` → POST /event/report dengan `{eventType: 'enterServer', data}`
+- `PPGAME.submitEvent(eventName, data)` → POST /event/report dengan `{eventType: eventName, data}`
+- `PPGAME.gameReady()` → POST /event/report dengan `{eventType: 'gameReady', data: {}}`
+- `PPGAME.gameChapterFinish(id)` → POST /event/report dengan `{eventType: 'chapterFinish', data: {chapterId: id}}`
+- `PPGAME.gameLevelUp(level)` → POST /event/report dengan `{eventType: 'levelUp', data: {level: level}}`
+
+**Catatan:** Event tetap aktif (bukan no-op) agar flow `main.min.js` tetap berjalan natural. SDK-Server menerima dan mencatat di console, bukan mengabaikan.
+
+### 15.6 Auth Response Format
 
 ```javascript
 // POST /auth/guest response:
@@ -1006,7 +1376,7 @@ Database: better-sqlite3 ^11.7.0 — file: ./data/sdk.db
 }
 ```
 
-### 13.5 Security Code Sharing dengan Login-Server — DECIDED: Option A
+### 15.7 Security Code Sharing dengan Login-Server — DECIDED: Option A
 
 **Keputusan:** Login-Server memanggil SDK-Server API untuk verifikasi securityCode. Setiap server bisa baca data server lain via API, tapi tetap standalone (DB terpisah, dependency terpisah). Tidak ada shared config.
 
@@ -1028,9 +1398,9 @@ Login-Server → jika tidak valid → reject dengan error code 55 (SIGN_ERROR)
 
 ---
 
-## 14. SDK.JS — SPESIFIKASI IMPLEMENTASI
+## 16. SDK.JS — SPESIFIKASI IMPLEMENTASI
 
-### 14.1 Loading Order
+### 16.1 Loading Order
 
 ```
 index.html memuat:
@@ -1040,7 +1410,7 @@ index.html memuat:
 4. (game code loaded dynamically via loadMainCodeAsync)
 ```
 
-### 14.2 Blocking Strategy
+### 16.2 Blocking Strategy
 
 sdk.js menggunakan **blocking pattern** — game code TIDAK jalan sampai login selesai:
 
@@ -1056,7 +1426,7 @@ sdk.js menggunakan **blocking pattern** — game code TIDAK jalan sampai login s
 // 8. Game code saat ini memanggil getSdkLoginInfo() → dapat data
 ```
 
-### 14.3 Structure
+### 16.3 Structure
 
 ```javascript
 (function() {
@@ -1066,6 +1436,7 @@ sdk.js menggunakan **blocking pattern** — game code TIDAK jalan sampai login s
     var SDK_SERVER = 'http://127.0.0.1:9999';
     var CHANNEL = 'ppgame';
     var SECRET_KEY = 'SUPER_WARRIOR_Z_SDK_SECRET_2026';
+    var STORAGE_KEY = 'ppgame_login';  // localStorage key
     
     // ====== STATE ======
     var _loginInfo = null;
@@ -1093,25 +1464,25 @@ sdk.js menggunakan **blocking pattern** — game code TIDAK jalan sampai login s
             // POST /payment/create ke SDK-Server
             // Tampilkan konfirmasi UI
             // POST /payment/confirm setelah user konfirmasi
-            // Notify Main-Server
+            // SDK-Server notify Main-Server via /api/payment/callback
         },
         playerEnterServer: function(data) {
-            // Log ke SDK-Server
+            // POST /event/report ke SDK-Server {eventType: 'enterServer', data}
         },
         submitEvent: function(eventName, data) {
-            // Log ke SDK-Server
+            // POST /event/report ke SDK-Server {eventType: eventName, data}
         },
         gameReady: function() {
-            // Signal game loaded
+            // POST /event/report ke SDK-Server {eventType: 'gameReady', data: {}}
         },
         gameChapterFinish: function(chapterId) {
-            // Log ke SDK-Server
+            // POST /event/report ke SDK-Server {eventType: 'chapterFinish', data: {chapterId}}
         },
         openShopPage: function() {
             // Buka shop UI
         },
         gameLevelUp: function(level) {
-            // Log ke SDK-Server
+            // POST /event/report ke SDK-Server {eventType: 'levelUp', data: {level}}
         }
     };
     
@@ -1141,7 +1512,7 @@ sdk.js menggunakan **blocking pattern** — game code TIDAK jalan sampai login s
     // - "Login by UserID" (input field)
     
     // ====== 6. AUTO-INIT ======
-    // Cek session cookie/localStorage
+    // Cek localStorage key 'ppgame_login'
     // Jika ada session aktif → langsung restore tanpa UI
     // Jika tidak → tampilkan Login UI
 })();
@@ -1149,9 +1520,9 @@ sdk.js menggunakan **blocking pattern** — game code TIDAK jalan sampai login s
 
 ---
 
-## 15. DATABASE SCHEMA — SDK-SERVER STANDALONE
+## 17. DATABASE SCHEMA — SDK-SERVER STANDALONE
 
-### 15.1 Tabel: `users`
+### 17.1 Tabel: `users`
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -1171,7 +1542,7 @@ CREATE INDEX IF NOT EXISTS idx_users_sdk ON users(sdk);
 CREATE INDEX IF NOT EXISTS idx_users_lastLoginAt ON users(lastLoginAt);
 ```
 
-### 15.2 Tabel: `sessions`
+### 17.2 Tabel: `sessions`
 
 ```sql
 CREATE TABLE IF NOT EXISTS sessions (
@@ -1189,7 +1560,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_loginToken ON sessions(loginToken);
 
 **Catatan:** Tidak ada expiry — session aktif selamanya sesuai keputusan user.
 
-### 15.3 Tabel: `payments`
+### 17.3 Tabel: `payments`
 
 ```sql
 CREATE TABLE IF NOT EXISTS payments (
@@ -1215,7 +1586,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_orderId ON payments(orderId);
 CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
 ```
 
-### 15.4 Tabel: `events`
+### 17.4 Tabel: `events`
 
 ```sql
 CREATE TABLE IF NOT EXISTS events (
@@ -1233,9 +1604,9 @@ CREATE INDEX IF NOT EXISTS idx_events_eventType ON events(eventType);
 
 ---
 
-## 16. LOGIN UI — GUEST & USERID LOGIN
+## 18. LOGIN UI — GUEST & USERID LOGIN
 
-### 16.1 Login UI Overlay
+### 18.1 Login UI Overlay
 
 sdk.js menampilkan overlay HTML di atas game canvas SEBELUM game code berjalan:
 
@@ -1257,15 +1628,20 @@ sdk.js menampilkan overlay HTML di atas game canvas SEBELUM game code berjalan:
 └──────────────────────────────────────┘
 ```
 
-### 16.2 Session Persistence
+### 18.2 Session Persistence
 
-- Setelah login berhasil, simpan `{userId, loginToken}` ke `localStorage`
-- Saat buka kembali, cek localStorage → jika ada session → langsung restore tanpa UI
-- Validasi session ke SDK-Server (`/auth/validate`)
+- Setelah login berhasil, simpan `{userId, loginToken}` ke `localStorage` dengan key **`ppgame_login`**
+- Format: JSON string — `localStorage.setItem('ppgame_login', JSON.stringify({userId, loginToken}))`
+- Saat buka kembali, cek `localStorage.getItem('ppgame_login')` → jika ada → parse → langsung restore tanpa UI
+- Validasi session ke SDK-Server (`/auth/validate`) dengan `{loginToken, userId, securityCode}`
 - Jika valid → langsung masuk game
-- Jika tidak valid → tampilkan Login UI lagi
+- Jika tidak valid → hapus localStorage, tampilkan Login UI lagi
 
-### 16.3 Guest Login Flow
+**Key name:** `ppgame_login`
+**Format:** `{"userId":"guest_xxxx","loginToken":"abc123..."}`
+**Alasan key name:** `ppgame_login` — singkat, jelas, unik. Tidak konflik dengan key lain di localStorage.
+
+### 18.3 Guest Login Flow
 
 ```
 1. User klik "Login as Guest"
@@ -1280,12 +1656,12 @@ sdk.js menampilkan overlay HTML di atas game canvas SEBELUM game code berjalan:
    g. INSERT ke sessions table
    h. Return {loginToken, sign, security, userId, nickName}
 4. sdk.js cache data, set _sdkReady = true
-5. Simpan ke localStorage
+5. Simpan ke localStorage: `ppgame_login` → `JSON.stringify({userId, loginToken})`
 6. Tutup Login UI
 7. Game code jalan → getSdkLoginInfo() → return data
 ```
 
-### 16.4 UserID Login Flow
+### 18.4 UserID Login Flow
 
 ```
 1. User masukkan UserID
@@ -1301,14 +1677,14 @@ sdk.js menampilkan overlay HTML di atas game canvas SEBELUM game code berjalan:
       - nickName = userId (atau 'User_' + shortId)
       - Return data user baru
 4. sdk.js cache data, set _sdkReady = true
-5. Simpan ke localStorage
+5. Simpan ke localStorage: `ppgame_login` → `JSON.stringify({userId, loginToken})`
 6. Tutup Login UI
 7. Game code jalan → getSdkLoginInfo() → return data
 ```
 
 ---
 
-## 17. ERROR CODES RELEVAN
+## 19. ERROR CODES RELEVAN
 
 | Code | errorType | Kapan | Hint | isKick |
 |------|-----------|-------|------|--------|
@@ -1319,7 +1695,7 @@ sdk.js menampilkan overlay HTML di atas game canvas SEBELUM game code berjalan:
 | 22 | — | Battle log trigger | — | — |
 | 29 | IP_NOT_IN_WHITE_LIST | IP diblokir | window | 1 |
 | 37 | ERROR_NO_LOGIN_CLIENT | User tidak ditemukan | window | 0 |
-| 38 | — | Force reload (version/auth) | window | — |
+| 38 | ERROR_LOGIN_CHECK_FAILED | Force reload (version/auth) | window | — |
 | 41 | PARAM_ERR | Parameter error | window | 0 |
 | 45 | FORBIDDEN_LOGIN | Akun dilarang | window | 0 |
 | 55 | SIGN_ERROR | securityCode mismatch | window | 0 |
@@ -1329,11 +1705,33 @@ sdk.js menampilkan overlay HTML di atas game canvas SEBELUM game code berjalan:
 
 **Error 38** → Client otomatis reload page. **Error 55** → securityCode tidak cocok di SaveHistory.
 
+### 19.1 Error 38 — REQUIRES DEEPER ANALYSIS
+
+**Status:** Belum sepenuhnya dipahami kapan Error 38 dikirim server dan kondisi apa yang memicunya.
+
+**Yang diketahui dari main.min.js:**
+- Error code 38 = `ERROR_LOGIN_CHECK_FAILED` (dari errorDefine.json)
+- Ketika client menerima error 38 dari server → client otomatis `window.location.reload()`
+- Ini adalah mekanisme "force reload" — server menyuruh client refresh page
+
+**Kemungkinan kondisi Error 38 dikirim:**
+1. Login session expired di server — server mendeteksi loginToken tidak valid
+2. Version mismatch — server mendeteksi client version tidak cocok
+3. Duplicate login — user login dari tempat lain, session lama di-invalidate
+4. Security validation failed — securityCode tidak cocok saat verifikasi
+
+**Yang perlu dianalisa lebih lanjut:**
+- Telusuri di `main.min(unminfy).js` semua tempat yang mengirim error code 38
+- Perhatikan di setiap server (Login, Main, Chat, Dungeon) kapan mereka mengirim code 38
+- Definisikan kondisi spesifik di setiap server specification
+
+**Untuk Phase 1 SDK:** Error 38 handling di client sudah jelas (auto-reload). Yang belum jelas adalah **kapan server mengirimnya** — ini akan didefinisikan saat masing-masing server diimplementasi di Phase 2-5.
+
 ---
 
-## 18. CATATAN IMPLEMENTASI
+## 20. CATATAN IMPLEMENTASI
 
-### 18.1 Blocking Login
+### 20.1 Blocking Login
 
 1. sdk.js **WAJIB** memblokir game init sampai login selesai
 2. `window.checkSDK()` return `false` sampai login data tersedia
@@ -1341,26 +1739,26 @@ sdk.js menampilkan overlay HTML di atas game canvas SEBELUM game code berjalan:
 4. Setelah login: `window.checkSDK()` return `true`, tutup overlay
 5. Game init akan membaca `getSdkLoginInfo()` → mendapat data yang sudah siap
 
-### 18.2 Session No Expiry
+### 20.2 Session No Expiry
 
 6. Session tidak pernah expired — user login sekali, tetap aktif selamanya
-7. Simpan di localStorage untuk persistence antar browser session
-8. Saat buka kembali: cek localStorage → validate ke SDK-Server → langsung masuk
+7. Simpan di `localStorage` key `ppgame_login` untuk persistence antar browser session
+8. Saat buka kembali: cek `localStorage.getItem('ppgame_login')` → validate ke SDK-Server → langsung masuk
 
-### 18.3 PPGAME Object
+### 20.3 PPGAME Object
 
 9. Implementasi langsung di sdk.js — tidak perlu ubah index.html bridge code
 10. `window.PPGAME` object dibuat di sdk.js, index.html bridge code akan bekerja
 11. index.html `if(window.PPGAME)` block akan menemukan PPGAME yang sudah di-set oleh sdk.js
 
-### 18.4 Sign & Security
+### 20.4 Sign & Security
 
 12. `sign` = `MD5(userId + secretKey)` — sederhana, cukup untuk identifikasi
 13. `securityCode` = `randomHex(16)` — random, cukup untuk verifikasi
 14. Keduanya TIDAK divalidasi oleh game client — hanya diteruskan ke server
 15. Login-Server memvalidasi securityCode via SDK-Server API call
 
-### 18.5 Payment
+### 20.5 Payment
 
 16. Payment gateway localhost — tanpa pihak ketiga
 17. Alur lengkap: create order → konfirmasi UI → confirm → SDK-Server notify Main-Server (server-to-server)
@@ -1369,38 +1767,60 @@ sdk.js menampilkan overlay HTML di atas game canvas SEBELUM game code berjalan:
 20. Main-Server push `payFinish` Notify ke client setelah menerima callback dari SDK-Server
 21. Retry mechanism: jika Main-Server tidak reachable, SDK-Server retry hingga 5x dengan interval 5s
 
-### 18.6 Database
+### 20.6 Database
 
 20. Setiap server: database file sendiri (`sdk.db`, `login.db`, `main.db`, `chat.db`, `dungeon.db`)
 21. Setiap server: dependency sendiri (`package.json` sendiri)
 22. Data sharing via API calls antar server (bukan shared DB file)
 23. better-sqlite3 WAL mode untuk performa
 
-### 18.7 TEA Verification
+### 20.7 TEA Verification
 
 24. Login-Server: `verifyEnable = false` — TIDAK ada TEA handshake
 25. Main/Chat/Dungeon Server: `verifyEnable = true` — WAJIB TEA handshake
 26. TEA key: `'verification'` (16 chars, 4 × 32-bit words)
 27. Algorithm: XXTEA, delta = `0x9E3779B9`
 
-### 18.8 Socket.IO
+### 20.8 Socket.IO
 
 28. Socket.IO versi 2.5.1 — BUKAN 3.x/4.x
 29. Satu event: `'handler.process'` untuk semua request/response
 30. Server push: `'Notify'` event dari Main-Server
 
-### 18.9 Client Version
+### 20.9 Client Version
 
 31. Client version dari `resource/properties/clientversion.json`
 32. Current: `"2026-03-02143147"`
 33. Dikirim ke Main-Server di `enterGame` sebagai `gameVersion`
 
+### 20.10 Decisions — SKIP/FINAL (v6.0)
+
+**Items yang di-SKIP untuk Phase 1 (SDK focus):**
+
+| Item | Status | Alasan | Kapan implement |
+|------|--------|--------|----------------|
+| `loginGame` action | **SKIP** | Bukan ranah SDK, fokus SDK dulu | Phase 2 (Login-Server) |
+| LoginAnnounce | **SKIP** | Bukan ranah SDK, tidak masuk scope | Phase 2 (Login-Server) |
+| LZString compression | **SKIP** | SDK tidak menggunakan LZString | Tidak pernah — SDK endpoint pakai raw JSON |
+| Error 38 conditions | **ANALISA LAGI** | Perlu telusuri lebih dalam di main.min.js | Saat implement masing-masing server |
+
+**Items yang FINAL:**
+
+| Item | Decision | Detail |
+|------|----------|--------|
+| server0Time | **25200000** | Fixed value — UTC+7 offset dalam milliseconds |
+| CORS | **Allow-Origin: \*** | Game:8080 ↔ SDK:9999, localhost-only, risk minimal |
+| Payment callback path | **/api/payment/callback** | FINAL — SDK-Server → Main-Server server-to-server |
+| localStorage key | **ppgame_login** | Format: `JSON.stringify({userId, loginToken})` |
+| Eruda integration | **No-inject** | Rely on existing Eruda di index.html |
+| Event reporting | **Active, log to console** | POST /event/report → HANYA log, tidak kirim external |
+
 ---
 
 
-## 19. LOG STYLE — SDK-SERVER & SDK.JS
+## 21. LOG STYLE — SDK-SERVER & SDK.JS
 
-### 19.1 Prinsip Logging
+### 21.1 Prinsip Logging
 
 **Detail adalah teman debugging.** Log harus mencatat SEMUA operasi penting dengan data lengkap, bukan hanya pesan singkat. Setiap log entry harus punya:
 - **Timestamp** — format `HH:mm:ss.SSS`
@@ -1409,11 +1829,11 @@ sdk.js menampilkan overlay HTML di atas game canvas SEBELUM game code berjalan:
 - **Context** — data relevan (userId, requestId, dll)
 - **Duration** — untuk operasi yang membutuhkan waktu
 
-### 19.2 Emoji System
+### 21.2 Emoji System
 
 Emoji dipakai sebagai **visual anchor** — mata langsung tertarik ke emoji, 1 detik tahu level + module.
 
-#### 19.2.1 Level Emoji (selalu konsisten, warna = level)
+#### 21.2.1 Level Emoji (selalu konsisten, warna = level)
 
 | Level | Emoji | chalk color |
 |-------|-------|-------------|
@@ -1422,7 +1842,7 @@ Emoji dipakai sebagai **visual anchor** — mata langsung tertarik ke emoji, 1 d
 | ERROR | 🔴 | `red` |
 | DEBUG | 🔵 | `cyan` |
 
-#### 19.2.2 Module Emoji (per domain, unik per module)
+#### 21.2.2 Module Emoji (per domain, unik per module)
 
 | Module | Emoji | chalk color |
 |--------|-------|-------------|
@@ -1434,7 +1854,7 @@ Emoji dipakai sebagai **visual anchor** — mata langsung tertarik ke emoji, 1 d
 | DB     | 💾 | `cyan` |
 | ROUTE  | 🛤️ | `gray` |
 
-#### 19.2.3 Detail Emoji (sub-line, tipe data)
+#### 21.2.3 Detail Emoji (sub-line, tipe data)
 
 | Tipe | Emoji | Fungsi |
 |------|-------|--------|
@@ -1445,11 +1865,11 @@ Emoji dipakai sebagai **visual anchor** — mata langsung tertarik ke emoji, 1 d
 | 💾 | Database | query, table |
 | ⚙️ | Config | setting, mode |
 
-### 19.3 SDK-SERVER LOG — Terminal (Node.js + chalk)
+### 21.3 SDK-SERVER LOG — Terminal (Node.js + chalk)
 
 SDK-SERVER menggunakan **chalk** untuk warna terminal. Format log yang **emoji-forward, detail, dan mudah di-scan**.
 
-#### 19.3.1 Log System Architecture
+#### 21.3.1 Log System Architecture
 
 ```javascript
 // logger.js — SDK-SERVER Terminal Logger
@@ -1536,7 +1956,7 @@ function routeLast(method, path) {
 module.exports = { log, detail, details, boundary, boundaryEnd, route, routeLast, LEVELS, MODULES, DETAILS, chalk };
 ```
 
-#### 19.3.2 Startup & Shutdown Logs
+#### 21.3.2 Startup & Shutdown Logs
 
 ```
 🚀 ══════════════════════════════════════════════════════════
@@ -1559,7 +1979,7 @@ module.exports = { log, detail, details, boundary, boundaryEnd, route, routeLast
 🟢 14:23:00.300 INFO  🚀 SERVER ▸ Ready — listening on http://127.0.0.1:9999
 ```
 
-#### 19.3.3 Auth Request Logs
+#### 21.3.3 Auth Request Logs
 
 ```
 🟢 14:23:01.457 INFO  🛡️ AUTH   ▸ Guest login success
@@ -1576,7 +1996,7 @@ module.exports = { log, detail, details, boundary, boundaryEnd, route, routeLast
   └ 📌 stack: AuthService.verify → L47
 ```
 
-#### 19.3.4 Payment Logs
+#### 21.3.4 Payment Logs
 
 ```
 🟢 14:23:05.201 INFO  💳 PAY    ▸ Payment order created
@@ -1592,7 +2012,7 @@ module.exports = { log, detail, details, boundary, boundaryEnd, route, routeLast
   └ ⏱️ 167ms
 ```
 
-#### 19.3.5 Payment Error & Retry Logs
+#### 21.3.5 Payment Error & Retry Logs
 
 ```
 🟡 14:23:07.112 WARN  📨 NOTIFY ▸ Notify retry — timeout
@@ -1605,7 +2025,7 @@ module.exports = { log, detail, details, boundary, boundaryEnd, route, routeLast
   └ 📌 saved to retry queue
 ```
 
-#### 19.3.6 Sign & Security Logs
+#### 21.3.6 Sign & Security Logs
 
 ```
 🔵 14:23:07.778 DEBUG 🔑 SIGN   ▸ Sign generation detail
@@ -1620,7 +2040,7 @@ module.exports = { log, detail, details, boundary, boundaryEnd, route, routeLast
   └ 📋 source: Login-Server · userId: G_17462 · valid: true
 ```
 
-#### 19.3.7 Cross-Server API Call Logs
+#### 21.3.7 Cross-Server API Call Logs
 
 ```
 🟢 14:32:10.789 INFO  🛡️ AUTH   ▸ Incoming from Login-Server
@@ -1630,11 +2050,13 @@ module.exports = { log, detail, details, boundary, boundaryEnd, route, routeLast
   └ 📋 userId: G_17462 · 3ms
 ```
 
-### 19.4 SDK.JS LOG — Eruda Console (Browser)
+### 21.4 SDK.JS LOG — Eruda Console (Browser)
 
 SDK.JS menggunakan **console.log + CSS styling** yang didukung browser DevTools dan Eruda. Emoji dipakai sama seperti terminal agar konsisten.
 
-#### 19.4.1 Log System Architecture
+**Keputusan Eruda Integration:** sdk.js TIDAK perlu inject Eruda sendiri. `index.html` sudah load Eruda (`eruda.init()`). Semua `console.log` dari sdk.js akan otomatis terlihat di Eruda console tanpa konfigurasi tambahan.
+
+#### 21.4.1 Log System Architecture
 
 ```javascript
 // sdk.js — Eruda Logger Module
@@ -1730,7 +2152,7 @@ var _log = (function() {
 })();
 ```
 
-#### 19.4.2 SDK Init & Login Logs
+#### 21.4.2 SDK Init & Login Logs
 
 ```
 🚀 ══════════════════════════════════════════════════════════
@@ -1774,7 +2196,7 @@ var _log = (function() {
 🟢 14:23:02.551 INFO  ⚡ SDK    ▸ SDK Ready — game init unblocked
 ```
 
-#### 19.4.3 Session Restore Logs
+#### 21.4.3 Session Restore Logs
 
 ```
 🚀 ══════════════════════════════════════════════════════════
@@ -1793,7 +2215,7 @@ var _log = (function() {
 🟢 14:23:00.127 INFO  ⚡ SDK    ▸ SDK Ready — game init unblocked
 ```
 
-#### 19.4.4 Game Lifecycle Logs
+#### 21.4.4 Game Lifecycle Logs
 
 ```
 🟢 14:23:05.100 INFO  🎮 GAME   ▸ window.gameReady() called
@@ -1817,7 +2239,7 @@ var _log = (function() {
   └ 📋 → PPGAME.gameLevelUp(25)
 ```
 
-#### 19.4.5 Payment Logs (Client Side)
+#### 21.4.5 Payment Logs (Client Side)
 
 ```
 🟢 14:23:10.100 INFO  💳 PAY    ▸ window.paySdk() called
@@ -1846,7 +2268,7 @@ var _log = (function() {
 🟢 14:23:12.555 INFO  💳 PAY    ▸ Waiting for Main-Server payFinish Notify...
 ```
 
-#### 19.4.6 Payment Cancel Logs
+#### 21.4.6 Payment Cancel Logs
 
 ```
 🟡 14:23:11.200 WARN  💳 PAY    ▸ User cancelled payment
@@ -1856,7 +2278,7 @@ var _log = (function() {
 🟡 14:23:11.202 WARN  💳 PAY    ▸ Payment cancelled
 ```
 
-#### 19.4.7 Error Logs (Client Side)
+#### 21.4.7 Error Logs (Client Side)
 
 ```
 🔴 14:23:03.000 ERROR 🌐 NET    ▸ Network error
@@ -1875,9 +2297,9 @@ var _log = (function() {
   └ 📌 Internal Server Error — Database write failed
 ```
 
-### 19.5 Log Level Control
+### 21.5 Log Level Control
 
-#### 19.5.1 SDK-SERVER (Terminal)
+#### 21.5.1 SDK-SERVER (Terminal)
 
 ```javascript
 // config.js
@@ -1902,7 +2324,7 @@ LOG_LEVEL=DEBUG node index.js
 LOG_LEVEL=WARN node index.js
 ```
 
-#### 19.5.2 SDK.JS (Eruda)
+#### 21.5.2 SDK.JS (Eruda)
 
 ```javascript
 // sdk.js — Log level diatur via localStorage
@@ -1915,7 +2337,7 @@ LOG_LEVEL=WARN node index.js
 var _logLevel = localStorage.getItem('SDK_LOG_LEVEL') || 'INFO';
 ```
 
-### 19.6 Chalk Color Map — SDK-SERVER
+### 21.6 Chalk Color Map — SDK-SERVER
 
 ```
 Line 1 (header):
@@ -1939,7 +2361,7 @@ Boundary:
   Text              → chalk.white.bold
 ```
 
-### 19.7 CSS Style Map — SDK.JS (Eruda)
+### 21.7 CSS Style Map — SDK.JS (Eruda)
 
 ```
 Line 1 (header):
@@ -1959,7 +2381,7 @@ Boundary:
   Text                     → color:white + font-weight:bold + font-size:13px
 ```
 
-### 19.8 Log Format Summary
+### 21.8 Log Format Summary
 
 **SDK-SERVER Terminal:**
 ```
