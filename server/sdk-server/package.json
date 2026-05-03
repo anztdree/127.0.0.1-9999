@@ -1,0 +1,17 @@
+{
+    "name": "sdk-server",
+    "version": "1.0.0",
+    "description": "Super Warrior Z — SDK Server (Port 9999)",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "LOG_LEVEL=DEBUG node index.js"
+    },
+    "dependencies": {
+        "express": "^4.18.0",
+        "better-sqlite3": "^11.7.0",
+        "md5": "^2.3.0",
+        "cors": "^2.8.5",
+        "chalk": "^4.1.2"
+    }
+}
