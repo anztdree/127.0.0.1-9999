@@ -25,7 +25,7 @@ module.exports = {
             _headImage:        'INTEGER DEFAULT 0',
             _lastLoginTime:    'INTEGER DEFAULT 0',
             _createTime:       'INTEGER DEFAULT 0',
-            _bulletinVersions: "TEXT DEFAULT '[]'",
+            _bulletinVersions: "TEXT DEFAULT '{}'",
             _oriServerId:      "TEXT DEFAULT ''",
             _nickChangeTimes:  'INTEGER DEFAULT 0',
             // ── JSON blob fields (di-parse saat response) ──
@@ -71,6 +71,7 @@ module.exports = {
             _gemstoneSuitId:        'INTEGER DEFAULT 0',
             _linkTo:                "TEXT DEFAULT '[]'",
             _linkFrom:              "TEXT DEFAULT ''",
+            _heroTag:               "TEXT DEFAULT ''",
             _heroBaseAttrJson:      "TEXT DEFAULT '{}'",
             _superSkillLevelJson:   "TEXT DEFAULT '[]'",
             _potentialLevelJson:    "TEXT DEFAULT '[]'",
@@ -365,6 +366,7 @@ module.exports = {
         cardLog: {
             _id:        'INTEGER PRIMARY KEY AUTOINCREMENT',
             _userId:    'TEXT NOT NULL',
+            _logUserId: "TEXT DEFAULT ''",
             _cardId:    'INTEGER DEFAULT 0',
             _userName:  "TEXT DEFAULT ''",
             _time:      'INTEGER DEFAULT 0',
@@ -391,7 +393,7 @@ module.exports = {
             _honghuUrl:           "TEXT DEFAULT ''",
             _honghuUrlStartTime:  'INTEGER DEFAULT 0',
             _honghuUrlEndTime:    'INTEGER DEFAULT 0',
-            _weeklyRewardTag:     'INTEGER DEFAULT 0',
+            _weeklyRewardTag:     "TEXT DEFAULT ''",
             _hideHeroesJson:      "TEXT DEFAULT '[]'",
             _foreignKey:          '_userId REFERENCES user(_id)',
             _indexes:             ['idx_channelSpecial_user ON(_userId)']
@@ -472,8 +474,8 @@ module.exports = {
                     _strongEnemyTimes: 0,
                     _strongEnemyBuyCount: 0,
                     _mergeBossBuyCount: 0,
-                    _dungeonTimes: {},
-                    _dungeonBuyTimesCount: {},
+                    _dungeonTimes: { '1': 2, '2': 2, '4': 2, '5': 2, '6': 2, '7': 2, '8': 2 },
+                    _dungeonBuyTimesCount: { '1': 0, '2': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0 },
                     _karinBattleTimes: 0,
                     _karinBuyBattleTimesCount: 0,
                     _karinBuyFeetCount: 0,
@@ -483,7 +485,7 @@ module.exports = {
                     _teamDugeonUsedRobots: [],
                     _timeTrialBuyTimesCount: 0,
                     _monthCardHaveGotReward: {},
-                    _goldBuyCount: {},
+                    _goldBuyCount: 0,
                     _likeRank: {},
                     _mahaAttackTimes: 0,
                     _mahaBuyTimesCount: 0,
@@ -500,21 +502,28 @@ module.exports = {
                     _bossCptBuyCount: 0,
                     _ballWarBuyCount: 0,
                     _expeditionEvents: {},
-                    _clickExpedition: 0,
+                    _clickExpedition: false,
                     _expeditionSpeedUpCost: 0,
                     _templeDailyReward: false,
                     _templeYesterdayLess: 0,
                     _topBattleTimes: 0,
                     _topBattleBuyCount: 0,
-                    _gravityTrialBuyTimesCount: 0
+                    _gravityTrialBuyTimesCount: 0,
+                    _hadBuytimes: 0,
+                    _costMaterialCount: 0,
+                    _clickTimeGift: false
                 }),
                 _guideJson: JSON.stringify({}),
                 _clickSystemJson: JSON.stringify({}),
                 _giftInfoJson: JSON.stringify({
-                    _fristRecharge: {},
+                    _levelGiftCount: {},
+                    _levelBuyGift: {},
+                    _fristRecharge: { _canGetReward: false, _haveGotReward: false },
                     _haveGotVipRewrd: {},
                     _buyVipGiftCount: {},
                     _onlineGift: { _curId: 0, _nextTime: 0 },
+                    _isBuyFund: false,
+                    _fundGiftCount: {},
                     _gotBSAddToHomeReward: false,
                     _clickHonghuUrlTime: 0,
                     _gotChannelWeeklyRewardTag: ''
@@ -544,7 +553,7 @@ module.exports = {
                     _extraArmor: 0, _hpPercent: 0, _armorPercent: 0,
                     _attackPercent: 0, _speedPercent: 0,
                     _orghp: 0, _superDamage: 0, _healPlus: 0,
-                    _healerPlus: 0, _damageDown: 0, _shielderPlus: 0, _damageUp: 0
+                    _healerPlus: 0, _damageDown: 0, _shielderPlus: 0, _damageUp: 0, _talent: 0
                 };
             }
 
@@ -556,15 +565,15 @@ module.exports = {
                 _qigongStage: 1,
                 _heroBaseAttrJson: JSON.stringify(startHeroBaseAttr),
                 _totalCostJson: JSON.stringify({
-                    _wakeUp: { _items: [] },
-                    _earring: { _items: [] },
-                    _levelUp: { _items: [] },
-                    _evolve: { _items: [] },
-                    _skill: { _items: [] },
-                    _qigong: { _items: [] },
-                    _heroBreak: { _items: [] }
+                    _wakeUp: [],
+                    _earring: [],
+                    _levelUp: [],
+                    _evolve: [],
+                    _skill: [],
+                    _qigong: [],
+                    _heroBreak: []
                 }),
-                _breakInfoJson: JSON.stringify({ _breakLevel: 1, _level: 0, _attr: { _items: [] } })
+                _breakInfoJson: JSON.stringify({ _breakLevel: 1, _level: 0, _attr: [] })
             });
 
             // Default currency items
@@ -668,8 +677,8 @@ module.exports = {
 
         // #5 totalProps._items
         const itemsDict = {};
-        items.forEach((item, index) => {
-            itemsDict[String(index)] = { _id: item._itemId, _num: item._num };
+        items.forEach((item) => {
+            itemsDict[String(item._itemId)] = { _id: item._itemId, _num: item._num };
         });
 
         // #7 equip._suits — dict key=heroId
@@ -810,7 +819,7 @@ module.exports = {
                 superSkillDict[String(ss._skillId)] = {
                     _skillId: ss._skillId,
                     _level: ss._level,
-                    _needEvolve: ss._needEvolve ? true : false,
+                    _needEvolve: ss._needEvolve ? true : false,    // ⚠️ Boolean, BUKAN Number! Client uses as boolean flag
                     _totalCost: safeParse(ss._totalCostJson, {})
                 };
             }
@@ -834,11 +843,13 @@ module.exports = {
         const vipLogArray = vipLogs.map(v => ({ _displayId: v._displayId || 0, _userName: v._userName || '' }));
 
         // #21 cardLog
-        const cardLogArray = cardLogs.map(c => ({ _cardId: c._cardId || 0, _userName: c._userName || '', _time: c._time || 0 }));
+        const cardLogArray = cardLogs.map(c => ({ _userId: c._logUserId || '', _cardId: c._cardId || 0, _userName: c._userName || '', _time: c._time || 0 }));
 
         // #25 giftInfo — sudah di-parse, tambah fallback
         if (giftInfo) {
-            if (!giftInfo._fristRecharge) giftInfo._fristRecharge = {};
+            if (!giftInfo._fristRecharge) giftInfo._fristRecharge = { _canGetReward: false, _haveGotReward: false };
+            if (!giftInfo._fristRecharge._canGetReward) giftInfo._fristRecharge._canGetReward = false;
+            if (!giftInfo._fristRecharge._haveGotReward) giftInfo._fristRecharge._haveGotReward = false;
             if (!giftInfo._haveGotVipRewrd) giftInfo._haveGotVipRewrd = {};
             if (!giftInfo._buyVipGiftCount) giftInfo._buyVipGiftCount = {};
             if (!giftInfo._onlineGift) giftInfo._onlineGift = { _curId: 0, _nextTime: 0 };
@@ -869,8 +880,8 @@ module.exports = {
             }
         });
 
-        // #32 _arenaSuper — Array of { _id: 'heroId' }
-        const arenaSuper = arenaSuperRows.map(as => ({ _id: as._heroId || '' }));
+        // #32 _arenaSuper — Array of hero ID strings
+        const arenaSuper = arenaSuperRows.map(as => as._heroId || '').filter(id => id);
 
         // #34 timeBonusInfo
         const timeBonusInfo = safeParse(miscJson._timeBonusInfo) || { _id: '', _timeBonus: [] };
@@ -1013,7 +1024,7 @@ module.exports = {
                 _honghuUrl: cs._honghuUrl || '',
                 _honghuUrlStartTime: cs._honghuUrlStartTime || 0,
                 _honghuUrlEndTime: cs._honghuUrlEndTime || 0,
-                _weeklyRewardTag: cs._weeklyRewardTag || 0,
+                _weeklyRewardTag: cs._weeklyRewardTag || '',    // ⚠️ String, BUKAN Number! Client reads as string tag
                 _hideHeroes: safeParse(cs._hideHeroesJson, [])
             };
         })() : {};
@@ -1102,8 +1113,9 @@ module.exports = {
                 };
             })() : {},
 
-            // #17 — cellgameHaveSetHero (optional, di-copy ke scheduleInfo)
+            // #17 — cellgameHaveSetHero (top-level, di-copy ke scheduleInfo oleh client)
             // client: void 0 != e.cellgameHaveSetHero && (e.scheduleInfo._cellgameHaveSetHero = e.cellgameHaveSetHero)
+            cellgameHaveSetHero: scheduleInfo._cellgameHaveSetHero || false,
 
             // #18 — scheduleInfo
             scheduleInfo: scheduleInfo,
@@ -1153,7 +1165,7 @@ module.exports = {
             // #32 — _arenaTeam ⚠️ Array(5) of { _id } or null
             _arenaTeam: arenaTeam,
 
-            // #33 — _arenaSuper ⚠️ Array of { _id }
+            // #33 — _arenaSuper ⚠️ Array of hero ID strings (flat array, BUKAN [{ _id }])
             _arenaSuper: arenaSuper,
 
             // #34 — timeBonusInfo
@@ -1172,8 +1184,11 @@ module.exports = {
             // #38 — serverOpenDate
             serverOpenDate: user._serverOpenDate || 0,
 
-            // #39 — lastTeam
-            lastTeam: Object.keys(lastTeamInfo).length > 0 ? { _lastTeamInfo: lastTeamInfo } : undefined,
+            // #39 — lastTeam — WAJIB selalu kirim { _lastTeamInfo: {...} } BUKAN undefined!
+            // BUG FIX: Jika undefined, client skip firstLoginSetMyTeam → _lastTeamInfo stays undefined
+            // → getMyTeamByType(9) crash: Cannot read properties of undefined (reading '9')
+            // Dengan { _lastTeamInfo: {} }, client calls firstLoginSetMyTeam({}) → _lastTeamInfo = {} (aman)
+            lastTeam: { _lastTeamInfo: lastTeamInfo },
 
             // #40 — heroImageVersion / superImageVersion (hanya jika ada)
             ...(user._heroImageVersion ? { heroImageVersion: user._heroImageVersion } : {}),
@@ -1204,9 +1219,9 @@ module.exports = {
             guildActivePoints: safeParse(miscJson._guildActivePoints) || undefined,
 
             // #48 — QQ-related (di-assign langsung, tanpa default)
-            enableShowQQ: user._enableShowQQ || 0,
+            enableShowQQ: user._enableShowQQ ? true : false,
             showQQVip: user._showQQVip || 0,
-            showQQ: user._showQQ || 0,
+            showQQ: user._showQQ ? true : false,
             showQQImg1: user._showQQImg1 || '',
             showQQImg2: user._showQQImg2 || '',
             showQQUrl: user._showQQUrl || '',
@@ -1220,7 +1235,7 @@ module.exports = {
             // client: WelfareInfoManager.getInstance().channelSpecial = e.channelSpecial
             // downstream: channelSpecial._weeklyRewardTag (line 126253) → crash jika undefined
             // downstream: channelSpecial._show, _vip, _bg, _icon (line 218803) → crash jika undefined
-            channelSpecial: Object.keys(channelSpecialData).length > 0 ? channelSpecialData : { _show: 0, _vip: 0, _bg: '', _icon: '', _btn1Url: '', _btn2Url: '', _honghuUrl: '', _honghuUrlStartTime: 0, _honghuUrlEndTime: 0, _weeklyRewardTag: 0, _hideHeroes: [] },
+            channelSpecial: Object.keys(channelSpecialData).length > 0 ? channelSpecialData : { _show: false, _vip: 0, _bg: '', _icon: '', _btn1Url: '', _btn2Url: '', _honghuUrl: '', _honghuUrlStartTime: 0, _honghuUrlEndTime: 0, _weeklyRewardTag: '', _hideHeroes: [] },
 
             // #51 — expedition
             expedition: expeditionData,
@@ -1305,6 +1320,10 @@ module.exports = {
             // #80 — broadcastRecord
             broadcastRecord: safeParse(miscJson._broadcastRecord) || []
         };
+
+        // NOTE: Response envelope HARUS menyertakan serverTime & server0Time:
+        //   { ret: 0, data: JSON.stringify(enterGameData), serverTime: Date.now(), server0Time: 25200000, compress: false }
+        //   Pastikan buildSuccess() menambahkan serverTime & server0Time di envelope!
 
         // Hapus field yang undefined (client guard: hanya di-parse jika truthy)
         Object.keys(enterGameData).forEach(key => {

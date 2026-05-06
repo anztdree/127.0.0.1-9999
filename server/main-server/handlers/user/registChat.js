@@ -25,11 +25,12 @@ module.exports = {
 
         // registChat response — berisi info chat server
         // Client menggunakan _chatServerUrl untuk connect ke Chat-Server
+        // Guild room ID: hardcode — semua player 1 guild room
         const responseData = {
             _success: true,
             _chatServerUrl: config.chatServerUrl,
             _worldRoomId: config.worldRoomId,
-            _guildRoomId: config.guildRoomIdPrefix + userId,  // Per-user guild room
+            _guildRoomId: config.guildRoomId,             // Hardcode: 'guild_1'
             _teamDungeonChatRoom: config.teamDungeonChatRoom,
             _teamChatRoom: config.teamChatRoomId
         };
